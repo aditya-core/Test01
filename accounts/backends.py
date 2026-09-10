@@ -23,11 +23,12 @@ class OfficerBackend(BaseBackend):
     """
 
     def authenticate(self, request, officer_id=None, password=None, **kwargs):
-        if not officer_id or not password:
+        username = kwargs.get("username") or officer_id
+        if not username or not password:
             return None
 
         try:
-            officer = Officer.objects.get(officer_id__iexact=officer_id.strip())
+            officer = Officer.objects.get(officer_id__iexact=username.strip())
         except Officer.DoesNotExist:
             # Constant-ish time against a dummy hash to reduce timing signal.
             check_password(password, "invalid$pbkdf2_sha256$390000$dummy$dummy")

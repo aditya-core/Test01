@@ -261,7 +261,7 @@ class Officer(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = "officers"
         constraints = [
             models.CheckConstraint(
-                check=models.Q(officer_id__regex=r"^[A-Z0-9][A-Z0-9\-]*$"),
+                condition=models.Q(officer_id__regex=r"^[A-Z0-9][A-Z0-9\-]*$"),
                 name="officer_id_uppercase",
             ),
         ]

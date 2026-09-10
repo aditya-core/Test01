@@ -176,6 +176,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='officer',
-            constraint=models.CheckConstraint(check=models.Q(('officer_id__regex', '^[A-Z0-9][A-Z0-9\\-]*$')), name='officer_id_uppercase'),
+            constraint=models.CheckConstraint(condition=models.Q(('officer_id__regex', '^[A-Z0-9][A-Z0-9\\-]*$')), name='officer_id_uppercase'),
         ),
     ]
