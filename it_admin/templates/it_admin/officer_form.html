@@ -1,0 +1,45 @@
+{% extends "portal/base.html" %}
+{% block title %}{% if creating %}Provision Officer{% else %}Edit Officer{% endif %}{% endblock %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Identity</div>
+<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
+<a href="{% url 'it_admin:officer_create' %}" class="{% if creating %}active{% endif %}">Provision officer</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>{% if creating %}Provision officer{% else %}Edit officer {{ officer.officer_id }}{% endif %}</h2>
+<p class="muted small">
+  {% if creating %}
+  New officers are created in <strong>INVITED</strong> status. They complete secure
+  activation with the provisional credentials issued here.
+  {% else %}
+  Authorization attributes (role, clearance, unit, portals). Rank and department are
+  descriptive only — they carry no access weight.
+  {% endif %}
+</p>
+
+<div class="panel">
+  {% if form.non_field_errors %}
+    <div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="cap-grid">
+      {% for field in form %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+          {% for e in field.errors %}<div class="error">{{ e }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn--primary">{% if creating %}Create officer{% else %}Save changes{% endif %}</button>
+  </form>
+</div>
+{% endblock %}

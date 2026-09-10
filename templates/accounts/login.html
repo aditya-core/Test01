@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ portal.title }} — Secure Sign In{% endblock %}
+
+{% block content %}
+<div class="container container--narrow">
+  <div class="login-card{% if portal_key == 'classified' %} login-card--restricted{% elif portal_key == 'it_admin' %} login-card--admin{% endif %}">
+    <h2>{{ portal.title }}</h2>
+    <p class="login-card__sub">{{ portal.subtitle }}</p>
+
+    {% if messages %}
+      <ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    {% if form.non_field_errors %}
+      <div class="form-errors">
+        <ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    <form method="post" action="{{ portal.login_url }}" novalidate>
+      {% csrf_token %}
+      <div class="field">
+        <label for="id_officer_id">Officer ID</label>
+        <input type="text" name="officer_id" id="id_officer_id" maxlength="32"
+               autocomplete="username" autofocus value="{{ form.officer_id.value|default_if_none:'' }}">
+        {% for e in form.officer_id.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="id_password">Password</label>
+        <input type="password" name="password" id="id_password" autocomplete="current-password">
+        {% for e in form.password.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="id_secret_code">Security Code / MFA</label>
+        <input type="password" name="secret_code" id="id_secret_code" autocomplete="one-time-code">
+        <div class="help">{{ form.secret_code.help_text }}</div>
+        {% for e in form.secret_code.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn--primary btn--block">Authenticate</button>
+    </form>
+  </div>
+
+  <p class="center small muted" style="margin-top:18px;">
+    <a href="{% url 'portal_selection' %}">← Back to portal selection</a>
+  </p>
+</div>
+{% endblock %}

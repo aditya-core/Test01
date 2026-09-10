@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Activate Account{% endblock %}
+
+{% block content %}
+<div class="container container--narrow">
+  <div class="login-card">
+    <h2>Activate Account</h2>
+    <p class="login-card__sub">Activating <span class="mono">{{ user.officer_id }}</span></p>
+
+    {% if messages %}
+      <ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    {% if form.non_field_errors %}
+      <div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="field">
+        <label for="id_provisional_password">Provisional password</label>
+        <input type="password" name="provisional_password" id="id_provisional_password" autocomplete="current-password">
+        {% for e in form.provisional_password.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="id_new_password">New password</label>
+        <input type="password" name="new_password" id="id_new_password" autocomplete="new-password">
+        {% for e in form.new_password.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="id_confirm_password">Confirm new password</label>
+        <input type="password" name="confirm_password" id="id_confirm_password" autocomplete="new-password">
+        {% for e in form.confirm_password.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="id_new_secret_code">New security code</label>
+        <input type="password" name="new_secret_code" id="new_secret_code" autocomplete="one-time-code">
+        <div class="help">{{ form.new_secret_code.help_text }}</div>
+        {% for e in form.new_secret_code.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn--primary btn--block">Activate account</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} — Secure Document Management</title>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+  <header class="gov-header">
+    <div class="gov-header__inner">
+      <div class="gov-header__emblem" aria-hidden="true">⚖</div>
+      <div class="gov-header__titles">
+        <h1>Secure Digital Document Management System</h1>
+        <p>{% block portal_label %}Authorized workspace{% endblock %}</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="shell__sidebar">
+      <div class="shell__brand">
+        <div class="portal-name">{% block portal_name %}{% endblock %}</div>
+        <div class="officer-id">{{ request.user.officer_id }}</div>
+        <div class="officer-name">{{ request.user.full_name }}{% if request.user.rank %} · {{ request.user.rank }}{% endif %}</div>
+      </div>
+      <nav class="shell__nav">
+        {% block nav %}{% endblock %}
+      </nav>
+    </aside>
+
+    <div>
+      <div class="shell__topbar">
+        <a class="btn btn--ghost btn--sm" href="{% url 'account_profile' %}">My Account</a>
+        <form method="post" action="{% url 'accounts:logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn--ghost btn--sm">Sign out</button>
+        </form>
+      </div>
+      <main class="shell__main">
+        {% if messages %}
+          <ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <script src="{% static 'js/app.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

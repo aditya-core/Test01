@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Activation Link Invalid{% endblock %}
+
+{% block content %}
+<div class="container container--narrow">
+  <div class="error-page">
+    <p class="code">400</p>
+    <h2>Activation link invalid</h2>
+    <p class="muted">This activation link is invalid or has expired. Contact Central IT to issue a new one.</p>
+    <p><a class="btn btn--ghost" href="{% url 'portal_selection' %}">Return to portal selection</a></p>
+  </div>
+</div>
+{% endblock %}

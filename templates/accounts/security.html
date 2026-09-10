@@ -1,0 +1,36 @@
+{% extends "portal/base.html" %}
+{% block title %}Security Code / MFA{% endblock %}
+{% block portal_label %}Account &amp; security{% endblock %}
+{% block portal_name %}My Account{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">Profile</a>
+<a href="{% url 'account_password' %}">Change password</a>
+<a href="{% url 'account_security' %}" class="active">Security code / MFA</a>
+{% endblock %}
+
+{% block content %}
+<h2>{% if configured %}Update{% else %}Set up{% endif %} security code</h2>
+<div class="panel" style="max-width:520px;">
+  <p class="small muted">
+    Your security code is a second factor. It is stored as a salted digest — never in
+    plaintext — and never shown again after it is set.
+  </p>
+  {% if form.non_field_errors %}
+    <div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+        {% for e in field.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <button type="submit" class="btn btn--primary">Save security code</button>
+  </form>
+</div>
+{% endblock %}

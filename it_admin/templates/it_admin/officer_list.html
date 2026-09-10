@@ -1,0 +1,52 @@
+{% extends "portal/base.html" %}
+{% block title %}Officer Management{% endblock %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Identity</div>
+<a href="{% url 'it_admin:officer_list' %}" class="active">Officer management</a>
+<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>Officer management</h2>
+
+<form method="get" style="margin-bottom:16px; display:flex; gap:8px; max-width:420px;">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search by Officer ID or name" style="flex:1; padding:9px 12px; border:1px solid #cdd5df; border-radius:6px;">
+  <button class="btn btn--primary btn--sm" type="submit">Search</button>
+</form>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Officer ID</th><th>Name</th><th>Role</th><th>Clearance</th><th>Unit</th><th>Status</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for officer in page.object_list %}
+    <tr>
+      <td class="mono">{{ officer.officer_id }}</td>
+      <td>{{ officer.full_name }}</td>
+      <td>{{ officer.role.name|default:"—" }}</td>
+      <td>{{ officer.clearance.code|default:"—" }}</td>
+      <td>{{ officer.unit.name|default:"—" }}</td>
+      <td><span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span></td>
+      <td><a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_detail' officer.pk %}">Manage</a></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7" class="muted">No officers found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if page.paginator.num_pages > 1 %}
+<div class="small muted" style="margin-top:10px;">
+  Page {{ page.number }} of {{ page.paginator.num_pages }}
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}">← Prev</a>{% endif %}
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

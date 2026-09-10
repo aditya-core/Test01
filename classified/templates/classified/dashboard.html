@@ -1,0 +1,37 @@
+{% extends "portal/base.html" %}
+{% block title %}Classified Portal{% endblock %}
+{% block portal_label %}Classified Workspace — Restricted{% endblock %}
+{% block portal_name %}Classified Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Classified workspace</div>
+<a href="#">Classified Workspace</a>
+<a href="#">Restricted Resources</a>
+<a href="#">Authorized Classified Cases</a>
+<a href="#">Security Events (my scope)</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>Classified workspace</h2>
+<p class="muted small">
+  This workspace is isolated from general workflows. Access requires explicit
+  classified-portal authorization and the required clearance.
+</p>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat__value">{{ caps.clearance|default:"—" }}</div><div class="stat__label">Your clearance</div></div>
+  <div class="stat"><div class="stat__value">{{ caps.role|default:"—" }}</div><div class="stat__label">Role</div></div>
+  <div class="stat"><div class="stat__value">{{ caps.unit|default:"—" }}</div><div class="stat__label">Unit</div></div>
+</div>
+
+<div class="panel">
+  <h3>Restricted resources</h3>
+  <p class="muted small">
+    Resource access is evaluated per request: clearance, organizational scope, case
+    assignment and requested action. Classified document and evidence modules will
+    plug into this surface.
+  </p>
+</div>
+{% endblock %}
