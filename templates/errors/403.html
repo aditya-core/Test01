@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Access Denied{% endblock %}
+{% block content %}
+<div class="container container--narrow">
+  <div class="error-page">
+    <p class="code">403</p>
+    <h2>Access denied</h2>
+    <p class="muted">You are not authorized to access this resource.</p>
+    <p><a class="btn btn--ghost" href="{% url 'portal_selection' %}">Return to portal selection</a></p>
+  </div>
+</div>
+{% endblock %}

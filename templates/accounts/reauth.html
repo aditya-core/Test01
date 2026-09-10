@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Re-authentication Required{% endblock %}
+
+{% block content %}
+<div class="container container--narrow">
+  <div class="login-card">
+    <h2>Re-authentication required</h2>
+    <p class="login-card__sub">Verify your identity to continue this sensitive operation.</p>
+
+    {% if form.non_field_errors %}
+      <div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="field">
+        <label for="id_password">Password</label>
+        <input type="password" name="password" id="id_password" autocomplete="current-password">
+        {% for e in form.password.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="id_secret_code">Security Code / MFA</label>
+        <input type="password" name="secret_code" id="id_secret_code" autocomplete="one-time-code">
+        {% for e in form.secret_code.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn--primary btn--block">Verify</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

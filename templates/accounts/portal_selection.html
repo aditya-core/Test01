@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Select Access Portal — Secure Document Management{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h2 class="section-title">Select Access Portal</h2>
+  <p class="section-subtitle">Choose your entry point. Access is granted strictly by authorization.</p>
+
+  <div class="portal-grid">
+    <a class="portal-card portal-card--restricted" href="{{ portals.classified.login_url }}">
+      <span class="portal-card__tag">Restricted</span>
+      <h2>Classified Access</h2>
+      <p>Highly restricted access. Requires explicit authorization and security clearance.</p>
+      <span class="portal-card__cta">Enter classified portal →</span>
+    </a>
+
+    <a class="portal-card portal-card--admin" href="{{ portals.it_admin.login_url }}">
+      <span class="portal-card__tag">Administration</span>
+      <h2>IT Department / Admin</h2>
+      <p>Identity &amp; system administration. Account provisioning and security monitoring.</p>
+      <span class="portal-card__cta">Enter administration portal →</span>
+    </a>
+
+    <a class="portal-card" href="{{ portals.general.login_url }}">
+      <span class="portal-card__tag">Officer</span>
+      <h2>General Officer</h2>
+      <p>Authorized officer access to operational workflows.</p>
+      <span class="portal-card__cta">Enter general portal →</span>
+    </a>
+  </div>
+
+  <div class="notice">
+    <strong>Security notice:</strong> Authorized personnel only. All access attempts may be recorded
+    and monitored. Unauthorized access is prohibited.
+  </div>
+</div>
+{% endblock %}

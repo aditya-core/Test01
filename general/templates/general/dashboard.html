@@ -1,0 +1,47 @@
+{% extends "portal/base.html" %}
+{% block title %}General Officer Portal{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+{% for item in nav %}
+  <a href="{{ item.url }}">{{ item.name }}</a>
+{% endfor %}
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>Welcome, {{ request.user.full_name }}</h2>
+<p class="muted small">Dashboard generated from your authorization profile. Capabilities you do not hold are not offered.</p>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat__value">{{ caps.clearance|default:"—" }}</div><div class="stat__label">Clearance</div></div>
+  <div class="stat"><div class="stat__value">{{ caps.role|default:"—" }}</div><div class="stat__label">Role</div></div>
+  <div class="stat"><div class="stat__value">{{ caps.unit|default:"—" }}</div><div class="stat__label">Unit</div></div>
+  <div class="stat"><div class="stat__value">{{ caps.organization|default:"—" }}</div><div class="stat__label">Organization</div></div>
+</div>
+
+<div class="panel">
+  <h3>Available capabilities</h3>
+  {% if nav %}
+    <div class="cap-grid">
+      {% for item in nav %}
+        <div class="cap"><div class="cap__v">{{ item.name }}</div><div class="cap__k">{{ item.icon }}</div></div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No capabilities granted. Contact Central IT if you require access.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h3>Operational workspace</h3>
+  <p class="muted small">
+    Case, document and evidence modules will plug into this portal. Each resource
+    access will be mediated by the central authorization engine (identity →
+    clearance → scope → case → action).
+  </p>
+</div>
+{% endblock %}

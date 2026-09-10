@@ -1,0 +1,32 @@
+{% extends "portal/base.html" %}
+{% block title %}Reset Credentials{% endblock %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Identity</div>
+<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
+<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>{% if mode == "password" %}Reset password{% else %}Reset security code{% endif %}</h2>
+<p class="muted small">Resetting for <span class="mono">{{ officer.officer_id }}</span> — {{ officer.full_name }}.
+This invalidates the officer's active sessions and is fully audited.</p>
+
+<div class="panel" style="max-width:480px;">
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="field">
+      <label for="id_value">
+        {% if mode == "password" %}New provisional password{% else %}New security code{% endif %}
+      </label>
+      <input type="password" name="{% if mode == 'password' %}new_password{% else %}new_code{% endif %}" id="id_value" autocomplete="off">
+      {% if mode == "password" %}<div class="help">At least 8 characters.</div>{% else %}<div class="help">6–32 characters.</div>{% endif %}
+    </div>
+    <button type="submit" class="btn btn--gold">Reset</button>
+  </form>
+</div>
+{% endblock %}

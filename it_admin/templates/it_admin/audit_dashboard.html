@@ -1,0 +1,42 @@
+{% extends "portal/base.html" %}
+{% block title %}Audit Logs{% endblock %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Identity</div>
+<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
+<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
+<div class="nav-section">Security</div>
+<a href="{% url 'it_admin:security_dashboard' %}">Security monitoring</a>
+<div class="nav-section">Accountability</div>
+<a href="{% url 'it_admin:audit_dashboard' %}" class="active">Audit logs</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>Audit logs</h2>
+<p class="muted small">Immutable record of security-sensitive events — allowed and denied.</p>
+
+<table class="table">
+  <thead>
+    <tr><th>Time</th><th>Event</th><th>Officer</th><th>Portal</th><th>Resource</th><th>Action</th><th>Result</th></tr>
+  </thead>
+  <tbody>
+    {% for e in events %}
+    <tr>
+      <td class="mono small">{{ e.occurred_at|date:"Y-m-d H:i:s" }}</td>
+      <td class="mono small">{{ e.event_type }}</td>
+      <td>{{ e.officer_id_snapshot|default:"—" }}</td>
+      <td>{{ e.portal|default:"—" }}</td>
+      <td class="mono small">{{ e.resource_type }}{% if e.resource_id %} {{ e.resource_id }}{% endif %}</td>
+      <td>{{ e.action|default:"—" }}</td>
+      <td><span class="badge badge--{% if e.result == 'ALLOW' or e.result == 'SUCCESS' %}success{% elif e.result == 'DENY' %}deny{% else %}info{% endif %}">{{ e.result|default:"—" }}</span></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7" class="muted">No audit events recorded.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

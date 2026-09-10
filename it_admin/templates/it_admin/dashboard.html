@@ -1,0 +1,51 @@
+{% extends "portal/base.html" %}
+{% block title %}IT / Admin Portal{% endblock %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{% block nav %}
+{% if "officer.view" in caps.permissions %}
+<div class="nav-section">Identity</div>
+<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
+<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
+{% endif %}
+{% if "security.view_events" in caps.permissions %}
+<div class="nav-section">Security</div>
+<a href="{% url 'it_admin:security_dashboard' %}">Security monitoring</a>
+{% endif %}
+{% if "audit.view" in caps.permissions %}
+<div class="nav-section">Accountability</div>
+<a href="{% url 'it_admin:audit_dashboard' %}">Audit logs</a>
+{% endif %}
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>System administration</h2>
+<p class="muted small">
+  Central IT is the root identity authority. Administering accounts does <strong>not</strong>
+  grant access to investigation data — that is a separate authorization domain.
+</p>
+
+<div class="stat-grid">
+  {% if officer_count is not None %}
+  <div class="stat"><div class="stat__value">{{ officer_count }}</div><div class="stat__label">Officers</div></div>
+  <div class="stat"><div class="stat__value">{{ active_count }}</div><div class="stat__label">Active</div></div>
+  {% endif %}
+  {% if open_alerts is not None %}
+  <div class="stat"><div class="stat__value">{{ open_alerts }}</div><div class="stat__label">Security alerts</div></div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h3>Administrative capabilities</h3>
+  <div class="cap-grid">
+    {% for p in caps.permissions %}
+      <div class="cap"><div class="cap__v mono">{{ p }}</div></div>
+    {% empty %}
+      <p class="muted">No administrative capabilities granted.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "portal/base.html" %}
+{% block title %}Officer {{ officer.officer_id }}{% endblock %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Identity</div>
+<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
+<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<h2>{{ officer.officer_id }} — {{ officer.full_name }}</h2>
+
+<div class="panel">
+  <div class="cap-grid">
+    <div class="cap"><div class="cap__k">Status</div><div class="cap__v"><span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span></div></div>
+    <div class="cap"><div class="cap__k">Email</div><div class="cap__v">{{ officer.email }}</div></div>
+    <div class="cap"><div class="cap__k">Phone</div><div class="cap__v">{{ officer.phone|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Rank</div><div class="cap__v">{{ officer.rank|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Department</div><div class="cap__v">{{ officer.department|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Role</div><div class="cap__v">{{ officer.role.name|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Clearance</div><div class="cap__v">{{ officer.clearance|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Unit</div><div class="cap__v">{{ officer.unit.name|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">MFA</div><div class="cap__v">{% if officer.secret_code_configured %}Configured{% else %}Not configured{% endif %}</div></div>
+    <div class="cap"><div class="cap__k">Failed attempts</div><div class="cap__v">{{ officer.failed_login_attempts }}</div></div>
+    <div class="cap"><div class="cap__k">Last login</div><div class="cap__v">{{ officer.last_login|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Created</div><div class="cap__v">{{ officer.created_at|date:"Y-m-d H:i" }}</div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>Portal access</h3>
+  {% for access in portals %}
+    <span class="badge badge--info">{{ access.portal.key }}</span>
+    {% if access.revoked_at %}<span class="badge badge--danger">revoked</span>{% endif %}
+  {% empty %}
+    <span class="muted">No portal grants.</span>
+  {% endfor %}
+</div>
+
+{% if officer.account_status == "INVITED" or officer.account_status == "PENDING" %}
+<div class="panel">
+  <h3>Activation</h3>
+  <p class="small muted">Share this link with the officer through a secure channel:</p>
+  <p><code class="mono small" style="word-break:break-all;">{{ activation_link }}</code></p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h3>Actions</h3>
+  <div style="display:flex; flex-wrap:wrap; gap:8px;">
+    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_edit' officer.pk %}">Edit attributes</a>
+    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_reset_password' officer.pk %}">Reset password</a>
+    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_reset_code' officer.pk %}">Reset security code</a>
+
+    {% if officer.account_status != "ACTIVE" and officer.account_status != "LOCKED" %}
+    <form method="post" action="{% url 'it_admin:officer_status' officer.pk %}" style="display:inline;">
+      {% csrf_token %}<input type="hidden" name="status" value="ACTIVE">
+      <button class="btn btn--primary btn--sm" type="submit">Activate</button>
+    </form>
+    {% endif %}
+    {% if officer.account_status != "SUSPENDED" %}
+    <form method="post" action="{% url 'it_admin:officer_status' officer.pk %}" style="display:inline;">
+      {% csrf_token %}<input type="hidden" name="status" value="SUSPENDED">
+      <button class="btn btn--gold btn--sm" type="submit">Suspend</button>
+    </form>
+    {% endif %}
+    {% if officer.account_status != "DISABLED" %}
+    <form method="post" action="{% url 'it_admin:officer_status' officer.pk %}" style="display:inline;">
+      {% csrf_token %}<input type="hidden" name="status" value="DISABLED">
+      <button class="btn btn--danger btn--sm" type="submit">Disable</button>
+    </form>
+    {% endif %}
+
+    {% if not officer.locked_until %}
+    <form method="post" action="{% url 'it_admin:officer_lock' officer.pk %}" style="display:inline;">
+      {% csrf_token %}<button class="btn btn--gold btn--sm" type="submit">Lock</button>
+    </form>
+    {% else %}
+    <form method="post" action="{% url 'it_admin:officer_unlock' officer.pk %}" style="display:inline;">
+      {% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">Unlock</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

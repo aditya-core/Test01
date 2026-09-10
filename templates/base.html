@@ -1,0 +1,32 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Secure Document Management{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+  <header class="gov-header">
+    <div class="gov-header__inner">
+      <div class="gov-header__emblem" aria-hidden="true">⚖</div>
+      <div class="gov-header__titles">
+        <h1>Secure Digital Document Management System</h1>
+        <p>Legal &amp; Investigation Infrastructure</p>
+      </div>
+    </div>
+  </header>
+  <div class="gov-strip">Authorized personnel only</div>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="gov-footer">
+    &copy; {% now "Y" %} — Official system. Unauthorized access is prohibited and may be prosecuted.
+  </footer>
+
+  <script src="{% static 'js/app.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

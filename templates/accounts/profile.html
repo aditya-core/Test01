@@ -1,0 +1,49 @@
+{% extends "portal/base.html" %}
+{% block title %}My Account{% endblock %}
+{% block portal_label %}Account &amp; security{% endblock %}
+{% block portal_name %}My Account{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}" class="active">Profile</a>
+<a href="{% url 'account_password' %}">Change password</a>
+<a href="{% url 'account_security' %}">Security code / MFA</a>
+{% endblock %}
+
+{% block content %}
+<h2>Officer profile</h2>
+<div class="panel">
+  <div class="cap-grid">
+    <div class="cap"><div class="cap__k">Officer ID</div><div class="cap__v mono">{{ officer.officer_id }}</div></div>
+    <div class="cap"><div class="cap__k">Full name</div><div class="cap__v">{{ officer.full_name }}</div></div>
+    <div class="cap"><div class="cap__k">Email</div><div class="cap__v">{{ officer.email }}</div></div>
+    <div class="cap"><div class="cap__k">Rank</div><div class="cap__v">{{ officer.rank|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Department</div><div class="cap__v">{{ officer.department|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Role</div><div class="cap__v">{{ officer.role.name|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Clearance</div><div class="cap__v">{{ officer.clearance|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Unit</div><div class="cap__v">{{ officer.unit.name|default:"—" }}</div></div>
+    <div class="cap"><div class="cap__k">Account status</div><div class="cap__v">{{ officer.account_status }}</div></div>
+    <div class="cap"><div class="cap__k">MFA / secret code</div><div class="cap__v">{% if officer.secret_code_configured %}Configured{% else %}Not configured{% endif %}</div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>Authorized portals</h3>
+  <p class="small muted">Entry to each portal is granted separately and checked server-side.</p>
+  {% for p in capabilities.portals %}
+    <span class="badge badge--info">{{ p }}</span>
+  {% empty %}
+    <span class="muted">None</span>
+  {% endfor %}
+</div>
+
+<div class="panel">
+  <h3>Effective permissions</h3>
+  <p class="small muted">Capabilities carried by your role (RBAC).</p>
+  {% for p in capabilities.permissions %}
+    <span class="badge badge--active mono">{{ p }}</span>
+  {% empty %}
+    <span class="muted">None</span>
+  {% endfor %}
+</div>
+{% endblock %}
