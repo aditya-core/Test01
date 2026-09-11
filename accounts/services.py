@@ -12,15 +12,19 @@ from typing import Iterable, Optional
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.utils import timezone
 
 from . import constants as C
 from .models import (
     AuthenticationFactor,
+    Department,
+    Designation,
     Officer,
     OrganizationUnit,
     Portal,
     PortalAccess,
+    PostingHistory,
     Role,
     ClearanceLevel,
 )
@@ -254,93 +258,191 @@ class AccountService:
     """Central IT state transitions. Every change is audited and (for blocking
     transitions) invalidates the officer's active sessions."""
 
-    def set_status(self, officer: Officer, status: str, actor: Officer, reason: str = ""):
+    # Transitions an administrator may request from the IT portal. LOCKED is
+    # reached through ``emergency_lock`` / login protection, never directly.
+    ADMIN_TRANSITIONS = {
+        "suspend": (C.ACCOUNT_STATUS_SUSPENDED, {C.ACCOUNT_STATUS_ACTIVE, C.ACCOUNT_STATUS_LOCKED}),
+        "reactivate": (C.ACCOUNT_STATUS_ACTIVE, C.BLOCKING_STATUSES | {C.ACCOUNT_STATUS_INVITED, C.ACCOUNT_STATUS_PENDING}),
+        "deactivate": (C.ACCOUNT_STATUS_DEACTIVATED, {
+            C.ACCOUNT_STATUS_ACTIVE, C.ACCOUNT_STATUS_SUSPENDED, C.ACCOUNT_STATUS_LOCKED,
+            C.ACCOUNT_STATUS_DISABLED, C.ACCOUNT_STATUS_INVITED, C.ACCOUNT_STATUS_PENDING,
+        }),
+    }
+
+    def can_transition(self, officer: Officer, action: str) -> bool:
+        spec = self.ADMIN_TRANSITIONS.get(action)
+        if spec is None:
+            return False
+        _target, allowed_from = spec
+        return officer.account_status in allowed_from
+
+    def set_status(self, officer: Officer, status: str, actor: Officer, reason: str = "", request=None):
         old = officer.account_status
         if old == status:
             return officer
-        officer.account_status = status
-        officer.is_active = status == C.ACCOUNT_STATUS_ACTIVE
-        if status != C.ACCOUNT_STATUS_ACTIVE:
-            officer.locked_until = None
-            officer.failed_login_attempts = 0
-        officer.save()
 
-        from audit.services import audit_service
+        # The state change and its audit record commit together; a failure
+        # while writing the audit row rolls the state change back.
+        with transaction.atomic():
+            officer.account_status = status
+            officer.is_active = status == C.ACCOUNT_STATUS_ACTIVE
+            if status != C.ACCOUNT_STATUS_ACTIVE:
+                officer.locked_until = None
+                officer.failed_login_attempts = 0
+            else:
+                # Reactivation clears any residual lockout so the officer can
+                # actually sign in again.
+                officer.locked_until = None
+                officer.failed_login_attempts = 0
+            officer.save()
 
-        event_map = {
-            C.ACCOUNT_STATUS_ACTIVE: C.EVENT_ACCOUNT_ACTIVATED,
-            C.ACCOUNT_STATUS_SUSPENDED: C.EVENT_ACCOUNT_SUSPENDED,
-            C.ACCOUNT_STATUS_DISABLED: C.EVENT_ACCOUNT_DISABLED,
-            C.ACCOUNT_STATUS_DEACTIVATED: C.EVENT_ACCOUNT_DEACTIVATED,
-            C.ACCOUNT_STATUS_LOCKED: C.EVENT_ACCOUNT_LOCKED,
-        }
-        event_type = event_map.get(status, C.EVENT_ACCOUNT_STATUS_CHANGED)
-        audit_service.record_event(
-            event_type,
-            officer=officer,
-            actor=actor,
-            result=C.RESULT_SUCCESS,
-            reason=reason,
-            context={"from": old, "to": status},
-        )
-        audit_service.record_security_event(
-            event_type,
-            severity=C.SEVERITY_WARNING,
-            officer=officer,
-            details={"from": old, "to": status, "actor": actor.officer_id},
-        )
+            from audit.services import audit_service
+
+            event_map = {
+                C.ACCOUNT_STATUS_ACTIVE: C.EVENT_ACCOUNT_ACTIVATED,
+                C.ACCOUNT_STATUS_SUSPENDED: C.EVENT_ACCOUNT_SUSPENDED,
+                C.ACCOUNT_STATUS_DISABLED: C.EVENT_ACCOUNT_DISABLED,
+                C.ACCOUNT_STATUS_DEACTIVATED: C.EVENT_ACCOUNT_DEACTIVATED,
+                C.ACCOUNT_STATUS_LOCKED: C.EVENT_ACCOUNT_LOCKED,
+            }
+            event_type = event_map.get(status, C.EVENT_ACCOUNT_STATUS_CHANGED)
+            if status == C.ACCOUNT_STATUS_ACTIVE and old in C.BLOCKING_STATUSES:
+                event_type = C.EVENT_ACCOUNT_REACTIVATED
+            audit_service.record_event(
+                event_type,
+                officer=officer,
+                actor=actor,
+                portal=C.PORTAL_IT_ADMIN if actor is not None and actor.pk != officer.pk else "",
+                resource_type="officer",
+                resource_id=officer.officer_id,
+                action=event_type.lower(),
+                result=C.RESULT_SUCCESS,
+                reason=reason,
+                context={"from": old, "to": status},
+                previous_state={"account_status": old},
+                new_state={"account_status": status},
+                request=request,
+            )
+            audit_service.record_security_event(
+                event_type,
+                severity=C.SEVERITY_WARNING,
+                officer=officer,
+                details={"from": old, "to": status, "actor": actor.officer_id if actor else None},
+                request=request,
+            )
 
         if status in C.BLOCKING_STATUSES or old in C.BLOCKING_STATUSES:
-            officer.revoke_all_sessions()
+            # Do not revoke operational authorization here. IT administration
+            # controls identity state; investigation authorization is handled
+            # by the separate authorization domain.
+            officer.revoke_all_sessions(end_reason=C.SESSION_END_ACCOUNT_STATE, actor=actor)
         return officer
 
     # Convenience transitions.
-    def activate(self, officer, actor=None): return self.set_status(officer, C.ACCOUNT_STATUS_ACTIVE, actor, "activated")
-    def suspend(self, officer, actor): return self.set_status(officer, C.ACCOUNT_STATUS_SUSPENDED, actor, "suspended by Central IT")
-    def disable(self, officer, actor): return self.set_status(officer, C.ACCOUNT_STATUS_DISABLED, actor, "disabled by Central IT")
-    def deactivate(self, officer, actor): return self.set_status(officer, C.ACCOUNT_STATUS_DEACTIVATED, actor, "deactivated by Central IT")
+    def activate(self, officer, actor=None, reason="activated", request=None):
+        return self.set_status(officer, C.ACCOUNT_STATUS_ACTIVE, actor, reason, request=request)
 
-    def lock(self, officer: Officer, actor: Officer, minutes: Optional[int] = None, reason: str = ""):
+    def suspend(self, officer, actor, reason="suspended by Central IT", request=None):
+        return self.set_status(officer, C.ACCOUNT_STATUS_SUSPENDED, actor, reason, request=request)
+
+    def disable(self, officer, actor, reason="disabled by Central IT", request=None):
+        return self.set_status(officer, C.ACCOUNT_STATUS_DISABLED, actor, reason, request=request)
+
+    def deactivate(self, officer, actor, reason="deactivated by Central IT", request=None):
+        return self.set_status(officer, C.ACCOUNT_STATUS_DEACTIVATED, actor, reason, request=request)
+
+    def reactivate(self, officer, actor, reason="reactivated by Central IT", request=None):
+        return self.set_status(officer, C.ACCOUNT_STATUS_ACTIVE, actor, reason, request=request)
+
+    def lock(self, officer: Officer, actor: Officer, minutes: Optional[int] = None, reason: str = "", request=None):
         minutes = minutes or int(getattr(settings, "ACCOUNTS_LOCKOUT_MINUTES", 15))
-        officer.locked_until = timezone.now() + timezone.timedelta(minutes=minutes)
-        officer.account_status = C.ACCOUNT_STATUS_LOCKED
-        officer.is_active = False
-        officer.save()
+        old = officer.account_status
+        with transaction.atomic():
+            officer.locked_until = timezone.now() + timezone.timedelta(minutes=minutes)
+            officer.account_status = C.ACCOUNT_STATUS_LOCKED
+            officer.is_active = False
+            officer.save()
 
-        from audit.services import audit_service
+            from audit.services import audit_service
 
-        audit_service.record_event(
-            C.EVENT_ACCOUNT_LOCKED, officer=officer, actor=actor,
-            result=C.RESULT_SUCCESS, reason=reason,
-        )
-        audit_service.record_security_event(
-            C.EVENT_ACCOUNT_LOCKED, severity=C.SEVERITY_ALERT, officer=officer,
-            details={"actor": actor.officer_id},
-        )
-        officer.revoke_all_sessions()
+            audit_service.record_event(
+                C.EVENT_ACCOUNT_LOCKED, officer=officer, actor=actor,
+                portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+                action="lock", result=C.RESULT_SUCCESS, reason=reason,
+                previous_state={"account_status": old},
+                new_state={"account_status": C.ACCOUNT_STATUS_LOCKED, "locked_until": officer.locked_until},
+                request=request,
+            )
+            audit_service.record_security_event(
+                C.EVENT_ACCOUNT_LOCKED, severity=C.SEVERITY_ALERT, officer=officer,
+                details={"actor": actor.officer_id}, request=request,
+            )
+        officer.revoke_all_sessions(end_reason=C.SESSION_END_ACCOUNT_STATE, actor=actor)
         return officer
 
-    def unlock(self, officer: Officer, actor: Officer):
-        officer.locked_until = None
-        officer.failed_login_attempts = 0
-        if officer.account_status == C.ACCOUNT_STATUS_LOCKED:
-            officer.account_status = C.ACCOUNT_STATUS_ACTIVE
-            officer.is_active = True
-        officer.save()
+    def emergency_lock(self, officer: Officer, actor: Officer, reason: str, request=None):
+        """Immediate, indefinite lock: blocks authentication, kills every
+        session and revokes every registered device. Reversible only through
+        an explicit administrator reactivation (no auto-expiry)."""
+        from .devices import device_session_service
+        from .models import RegisteredDevice
 
-        from audit.services import audit_service
+        old = officer.account_status
+        with transaction.atomic():
+            officer.locked_until = None  # indefinite — status alone blocks login
+            officer.account_status = C.ACCOUNT_STATUS_LOCKED
+            officer.is_active = False
+            officer.save()
 
-        audit_service.record_event(
-            C.EVENT_ACCOUNT_UNLOCKED, officer=officer, actor=actor, result=C.RESULT_SUCCESS,
-        )
-        audit_service.record_security_event(
-            C.EVENT_ACCOUNT_UNLOCKED, severity=C.SEVERITY_INFO, officer=officer,
-            details={"actor": actor.officer_id},
-        )
+            from audit.services import audit_service
+
+            audit_service.record_event(
+                C.EVENT_ACCOUNT_EMERGENCY_LOCKED, officer=officer, actor=actor,
+                portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+                action="emergency_lock", result=C.RESULT_SUCCESS, reason=reason,
+                previous_state={"account_status": old},
+                new_state={"account_status": C.ACCOUNT_STATUS_LOCKED},
+                request=request,
+            )
+            audit_service.record_security_event(
+                C.EVENT_ACCOUNT_EMERGENCY_LOCKED, severity=C.SEVERITY_CRITICAL, officer=officer,
+                details={"actor": actor.officer_id, "reason": reason}, request=request,
+            )
+        officer.revoke_all_sessions(end_reason=C.SESSION_END_ACCOUNT_STATE, actor=actor)
+        for device in RegisteredDevice.objects.filter(officer=officer, status=C.DEVICE_STATUS_ACTIVE):
+            device_session_service.revoke_device(device, actor, reason=f"Emergency lock: {reason}"[:255], request=request)
         return officer
 
-    def assign_role(self, officer: Officer, role: Role, actor: Officer):
+    def unlock(self, officer: Officer, actor: Officer, reason: str = "", request=None):
+        old = officer.account_status
+        with transaction.atomic():
+            officer.locked_until = None
+            officer.failed_login_attempts = 0
+            if officer.account_status == C.ACCOUNT_STATUS_LOCKED:
+                officer.account_status = C.ACCOUNT_STATUS_ACTIVE
+                officer.is_active = True
+            officer.save()
+
+            from audit.services import audit_service
+
+            audit_service.record_event(
+                C.EVENT_ACCOUNT_UNLOCKED, officer=officer, actor=actor,
+                portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+                action="unlock", result=C.RESULT_SUCCESS, reason=reason,
+                previous_state={"account_status": old},
+                new_state={"account_status": officer.account_status},
+                request=request,
+            )
+            audit_service.record_security_event(
+                C.EVENT_ACCOUNT_UNLOCKED, severity=C.SEVERITY_INFO, officer=officer,
+                details={"actor": actor.officer_id}, request=request,
+            )
+        return officer
+
+    def assign_role(self, officer: Officer, role: Optional[Role], actor: Officer, reason: str = "", request=None):
         old = officer.role
+        if (old.pk if old else None) == (role.pk if role else None):
+            return officer
         officer.role = role
         officer.save(update_fields=["role", "updated_at"])
 
@@ -348,12 +450,19 @@ class AccountService:
 
         audit_service.record_event(
             C.EVENT_ROLE_CHANGED, officer=officer, actor=actor, result=C.RESULT_SUCCESS,
-            context={"from": old.name if old else None, "to": role.name},
+            portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+            action="assign_role", reason=reason,
+            context={"from": old.name if old else None, "to": role.name if role else None},
+            previous_state={"role": old.name if old else None},
+            new_state={"role": role.name if role else None},
+            request=request,
         )
         return officer
 
-    def assign_clearance(self, officer: Officer, clearance: ClearanceLevel, actor: Officer):
+    def assign_clearance(self, officer: Officer, clearance: Optional[ClearanceLevel], actor: Officer, reason: str = "", request=None):
         old = officer.clearance
+        if (old.pk if old else None) == (clearance.pk if clearance else None):
+            return officer
         officer.clearance = clearance
         officer.save(update_fields=["clearance", "updated_at"])
 
@@ -361,12 +470,19 @@ class AccountService:
 
         audit_service.record_event(
             C.EVENT_CLEARANCE_CHANGED, officer=officer, actor=actor, result=C.RESULT_SUCCESS,
-            context={"from": old.code if old else None, "to": clearance.code},
+            portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+            action="assign_clearance", reason=reason,
+            context={"from": old.code if old else None, "to": clearance.code if clearance else None},
+            previous_state={"clearance": old.code if old else None},
+            new_state={"clearance": clearance.code if clearance else None},
+            request=request,
         )
         return officer
 
-    def assign_unit(self, officer: Officer, unit: OrganizationUnit, actor: Officer):
+    def assign_unit(self, officer: Officer, unit: Optional[OrganizationUnit], actor: Officer, reason: str = "", request=None):
         old = officer.unit
+        if (old.pk if old else None) == (unit.pk if unit else None):
+            return officer
         officer.unit = unit
         officer.save(update_fields=["unit", "updated_at"])
 
@@ -374,7 +490,12 @@ class AccountService:
 
         audit_service.record_event(
             C.EVENT_UNIT_CHANGED, officer=officer, actor=actor, result=C.RESULT_SUCCESS,
-            context={"from": old.name if old else None, "to": unit.name},
+            portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+            action="assign_unit", reason=reason,
+            context={"from": old.name if old else None, "to": unit.name if unit else None},
+            previous_state={"unit": old.name if old else None},
+            new_state={"unit": unit.name if unit else None},
+            request=request,
         )
         return officer
 
@@ -402,45 +523,89 @@ class ProvisioningService:
         clearance: Optional[ClearanceLevel],
         unit: Optional[OrganizationUnit],
         rank: str = "",
-        department: str = "",
+        department=None,
+        designation: Optional[Designation] = None,
+        employee_id: str = "",
+        supervisor: Optional[Officer] = None,
+        joining_date=None,
         phone: str = "",
         portals: Iterable[Portal] = (),
         initial_secret_code: str = "",
         reason: str = "",
+        request=None,
     ) -> Officer:
-        officer = Officer.objects.create_officer(
-            officer_id=officer_id,
-            email=email,
-            password=initial_password,
-            full_name=full_name,
-            role=role,
-            clearance=clearance,
-            unit=unit,
-            rank=rank,
-            department=department,
-            phone=phone,
-            account_status=C.ACCOUNT_STATUS_INVITED,
-            is_active=False,
-        )
+        # ``department`` accepts a Department instance (new) or a legacy
+        # free-text label (older callers/tests) which is preserved verbatim.
+        legacy_department = ""
+        if isinstance(department, str):
+            legacy_department, department = department, None
 
-        if initial_secret_code:
-            SecurityCodeService().set_secret_code(officer, initial_secret_code, actor=actor)
+        with transaction.atomic():
+            officer = Officer.objects.create_officer(
+                officer_id=officer_id,
+                email=email,
+                password=initial_password,
+                full_name=full_name,
+                role=role,
+                clearance=clearance,
+                unit=unit,
+                rank=rank or (designation.name if designation else ""),
+                designation=designation,
+                department=department,
+                legacy_department=legacy_department,
+                employee_id=(employee_id or "").strip().upper(),
+                supervisor=supervisor,
+                joining_date=joining_date,
+                phone=phone,
+                account_status=C.ACCOUNT_STATUS_INVITED,
+                is_active=False,
+            )
 
-        granted = []
-        for portal in portals:
-            self.grant_portal(officer, portal, actor, reason="provisioned by Central IT")
-            granted.append(portal.key)
+            if initial_secret_code:
+                SecurityCodeService().set_secret_code(officer, initial_secret_code, actor=actor)
 
-        from audit.services import audit_service
+            granted = []
+            for portal in portals:
+                self.grant_portal(officer, portal, actor, reason="provisioned by Central IT")
+                granted.append(portal.key)
 
-        audit_service.record_event(
-            C.EVENT_ACCOUNT_CREATED,
-            officer=officer,
-            actor=actor,
-            result=C.RESULT_SUCCESS,
-            reason=reason,
-            context={"portals": granted, "role": role.name if role else None},
-        )
+            # Initial posting is history too — a later transfer must be able
+            # to show where the officer started.
+            if department or unit or designation:
+                PostingHistory.objects.create(
+                    officer=officer,
+                    kind=C.POSTING_INITIAL,
+                    to_department=department,
+                    to_unit=unit,
+                    to_designation=designation,
+                    effective_date=joining_date or timezone.localdate(),
+                    reason=reason or "Initial posting at provisioning",
+                    recorded_by=actor,
+                )
+
+            from audit.services import audit_service
+
+            audit_service.record_event(
+                C.EVENT_ACCOUNT_CREATED,
+                officer=officer,
+                actor=actor,
+                portal=C.PORTAL_IT_ADMIN,
+                resource_type="officer",
+                resource_id=officer.officer_id,
+                action="provision",
+                result=C.RESULT_SUCCESS,
+                reason=reason,
+                context={"portals": granted, "role": role.name if role else None},
+                new_state={
+                    "full_name": full_name,
+                    "email": email,
+                    "department": department.name if department else legacy_department or None,
+                    "unit": unit.name if unit else None,
+                    "designation": designation.name if designation else rank or None,
+                    "account_status": C.ACCOUNT_STATUS_INVITED,
+                },
+                request=request,
+            )
         return officer
 
     def generate_officer_id(self) -> str:
@@ -456,13 +621,15 @@ class ProvisioningService:
 
         audit_service.record_event(
             C.EVENT_PASSWORD_RESET, officer=officer, actor=actor, result=C.RESULT_SUCCESS,
+            portal=C.PORTAL_IT_ADMIN, resource_type="officer", resource_id=officer.officer_id,
+            action="reset_password",
         )
-        officer.revoke_all_sessions()
+        officer.revoke_all_sessions(end_reason=C.SESSION_END_CREDENTIAL_RESET, actor=actor)
         return officer
 
     def reset_secret_code(self, officer: Officer, actor: Officer, new_code: str):
         SecurityCodeService().set_secret_code(officer, new_code, actor=actor)
-        officer.revoke_all_sessions()
+        officer.revoke_all_sessions(end_reason=C.SESSION_END_CREDENTIAL_RESET, actor=actor)
         return officer
 
     def grant_portal(self, officer: Officer, portal: Portal, actor: Officer, reason: str = ""):

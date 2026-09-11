@@ -1,0 +1,66 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Access Review — {{ officer.officer_id }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:access_review_list' %}">Access reviews</a> / {{ officer.officer_id }}</p>
+<h2>Access review — {{ officer.full_name }} <span class="mono muted">{{ officer.officer_id }}</span></h2>
+<p class="small">
+  <span class="badge badge--{% if review.status == 'PENDING' %}warning{% else %}info{% endif %}">{{ review.status }}</span>
+  Trigger: <strong>{{ review.trigger }}</strong> · raised {{ review.created_at|date:"Y-m-d H:i" }} by {{ review.created_by.officer_id|default:"system" }} · due {{ review.due_at|date:"Y-m-d" }}
+</p>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Administrative access snapshot (at review creation)</h3>
+    <dl class="kv">
+      <dt>Role</dt><dd>{{ review.snapshot.role|default:"—" }}</dd>
+      <dt>Status</dt><dd>{{ review.snapshot.account_status|default:"—" }}</dd>
+      <dt>Unit</dt><dd>{{ review.snapshot.unit|default:"—" }}</dd>
+      <dt>Capabilities</dt><dd>{% for c in review.snapshot.admin_capabilities %}<span class="badge badge--info mono">{{ c }}</span> {% empty %}<span class="muted">none</span>{% endfor %}</dd>
+    </dl>
+    <h4>Current administrative access</h4>
+    <dl class="kv">
+      <dt>Role</dt><dd>{{ current.role|default:"—" }}</dd>
+      <dt>Status</dt><dd>{{ current.account_status|default:"—" }}</dd>
+      <dt>Unit</dt><dd>{{ current.unit|default:"—" }}</dd>
+      <dt>Capabilities</dt><dd>{% for c in current.admin_capabilities %}<span class="badge badge--info mono">{{ c }}</span> {% empty %}<span class="muted">none</span>{% endfor %}</dd>
+    </dl>
+    {% if temporary %}
+    <h4>Temporary grants</h4>
+    <ul class="event-list small">{% for g in temporary %}<li><span class="mono">{{ g.permission.codename }}</span> <span class="badge badge--info">{{ g.effective_status }}</span> until {{ g.expires_at|date:"Y-m-d H:i" }}</li>{% endfor %}</ul>
+    {% endif %}
+    <p class="small muted">Operational authorization is managed separately. <a href="{% url 'it_admin:officer_access' officer.pk %}">Why does this officer have access? →</a></p>
+  </div>
+
+  <div class="panel">
+    {% if review.status == "PENDING" %}
+      <h3>Decision</h3>
+      {% if is_self %}
+        <p class="notice small">You cannot review your own access.</p>
+      {% else %}
+      <form method="post" action="{% url 'it_admin:access_review_decide' review.pk %}">
+        {% csrf_token %}
+        <div class="field">
+          <label>Decision</label>
+          <div class="radio-list">
+            <label><input type="radio" name="decision" value="KEEP" required> <strong>KEEP</strong> — access is still appropriate</label>
+            <label><input type="radio" name="decision" value="MODIFY"> <strong>MODIFY</strong> — adjust role / portals after recording</label>
+            <label><input type="radio" name="decision" value="REVOKE"> <strong>REVOKE</strong> — remove administrative role and end temporary grants</label>
+          </div>
+        </div>
+        <div class="field"><label>Note</label><textarea name="note" rows="2" placeholder="Recorded in the audit trail"></textarea></div>
+        <button type="submit" class="btn btn--primary">Record decision</button>
+      </form>
+      {% endif %}
+    {% else %}
+      <h3>Outcome</h3>
+      <dl class="kv">
+        <dt>Decision</dt><dd><span class="badge badge--{% if review.decision == 'KEEP' %}success{% elif review.decision == 'REVOKE' %}deny{% else %}warning{% endif %}">{{ review.decision }}</span></dd>
+        <dt>Reviewer</dt><dd class="mono">{{ review.reviewed_by.officer_id|default:"—" }}</dd>
+        <dt>When</dt><dd>{{ review.reviewed_at|date:"Y-m-d H:i" }}</dd>
+        <dt>Note</dt><dd>{{ review.decision_note|default:"—" }}</dd>
+      </dl>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

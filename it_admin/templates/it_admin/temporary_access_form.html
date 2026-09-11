@@ -1,0 +1,17 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Grant Temporary Capability{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:temporary_access_list' %}">Temporary access</a> / Grant</p>
+<h2>Grant temporary administrative capability</h2>
+<p class="muted small">Only administrative capabilities can be granted. The grant is evaluated live by the authorization engine and stops working at expiry.</p>
+<div class="panel" style="max-width:720px;">
+  {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="form-grid">{% include "it_admin/_partials/form_fields.html" %}</div>
+    <button type="submit" class="btn btn--primary">Grant</button>
+    <a class="btn btn--ghost" href="{% url 'it_admin:temporary_access_list' %}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

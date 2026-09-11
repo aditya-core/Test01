@@ -1,0 +1,42 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Designations{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Designation &amp; rank registry</h2>
+    <p class="muted small">Designation describes an officer's rank. It is <strong>not</strong> a permission and carries no access weight.</p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost btn--sm" href="?inactive={% if show_inactive %}0{% else %}1{% endif %}">{% if show_inactive %}Hide inactive{% else %}Show inactive{% endif %}</a>
+    {% if can_manage %}<a class="btn btn--primary btn--sm" href="{% url 'it_admin:designation_create' %}">New designation</a>{% endif %}
+  </div>
+</div>
+
+<table class="table">
+  <thead><tr><th>Code</th><th>Designation</th><th>Rank level</th><th>Description</th><th>Officers</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for d in designations %}
+    <tr>
+      <td class="mono">{{ d.code }}</td>
+      <td><strong>{{ d.name }}</strong></td>
+      <td>{{ d.rank_level }}</td>
+      <td class="small muted">{{ d.description|default:"—" }}</td>
+      <td><a href="{% url 'it_admin:officer_list' %}?designation={{ d.pk }}">{{ d.assigned }}</a></td>
+      <td>{% if d.is_active %}<span class="badge badge--active">ACTIVE</span>{% else %}<span class="badge badge--disabled">INACTIVE</span>{% endif %}</td>
+      <td class="nowrap">
+        {% if can_manage %}
+          <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:designation_edit' d.pk %}">Edit</a>
+          <form method="post" action="{% url 'it_admin:designation_toggle' d.pk %}" class="inline">{% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">{% if d.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>
+          {% if d.assigned == 0 %}
+          <form method="post" action="{% url 'it_admin:designation_delete' d.pk %}" class="inline" onsubmit="return confirm('Remove designation {{ d.name|escapejs }}? This cannot be undone.');">{% csrf_token %}<button class="btn btn--danger btn--sm" type="submit">Remove</button></form>
+          {% endif %}
+        {% else %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_list' %}?designation={{ d.pk }}">View officers</a>{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7" class="muted">No designations defined.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

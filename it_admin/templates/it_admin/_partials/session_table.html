@@ -1,0 +1,21 @@
+{% if sessions %}
+<table class="table">
+  <thead><tr>{% if show_officer %}<th>Officer</th>{% endif %}<th>Started</th><th>Last activity</th><th>Portal</th><th>IP</th><th>Browser / OS</th><th>State</th><th></th></tr></thead>
+  <tbody>
+  {% for s in sessions %}
+    <tr>
+      {% if show_officer %}<td><a href="{% url 'it_admin:officer_devices_sessions' s.officer.pk %}" class="mono">{{ s.officer.officer_id }}</a></td>{% endif %}
+      <td class="small">{{ s.started_at|date:"Y-m-d H:i" }}</td>
+      <td class="small">{{ s.last_activity|date:"Y-m-d H:i" }}</td>
+      <td class="small">{{ s.portal|default:"—" }}</td>
+      <td class="mono small">{{ s.ip_address|default:"—" }}</td>
+      <td class="small">{{ s.browser|default:"Unknown" }} / {{ s.operating_system|default:"Unknown" }}</td>
+      <td>{% if s.ended_at %}<span class="badge badge--info">{{ s.get_end_reason_display|default:"ended" }}</span><div class="small muted">{{ s.ended_at|date:"Y-m-d H:i" }}</div>{% else %}<span class="badge badge--success">active</span>{% endif %}</td>
+      <td>{% if can_terminate and not s.ended_at %}
+        <form method="post" action="{% url 'it_admin:session_terminate' s.pk %}" class="inline">{% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}"><button class="btn btn--ghost btn--sm" type="submit">Terminate</button></form>
+      {% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted small">No sessions.</p>{% endif %}

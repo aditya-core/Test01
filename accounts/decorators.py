@@ -86,6 +86,42 @@ def permission_required(permission: str):
     return decorator
 
 
+def any_permission_required(*permissions: str):
+    """Require at least one of several RBAC permissions.
+
+    Used for pages that aggregate several capabilities (e.g. an account
+    security page showing suspend *or* reactivate). Each individual action
+    endpoint still checks its own specific permission.
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped(request, *args, **kwargs):
+            user = request.user
+            if not user.is_authenticated:
+                return HttpResponseRedirect(reverse(LOGIN_URL_NAME, kwargs={"portal_key": "general"}))
+
+            held = authorization_service.get_user_permissions(user)
+            if any(p in held for p in permissions):
+                return view_func(request, *args, **kwargs)
+
+            from audit.services import audit_service
+
+            audit_service.record_denied(
+                officer=user,
+                action=" | ".join(permissions),
+                resource_type="permission",
+                resource_id=permissions[0] if permissions else "",
+                reason="Permission denied",
+                request=request,
+            )
+            raise PermissionDenied("You do not have permission to perform this action.")
+
+        return _wrapped
+
+    return decorator
+
+
 def reauth_required(view_func):
     """Require a recent second-factor verification before a sensitive action."""
 

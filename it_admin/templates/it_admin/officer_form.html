@@ -1,45 +1,95 @@
-{% extends "portal/base.html" %}
-{% block title %}{% if creating %}Provision Officer{% else %}Edit Officer{% endif %}{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
+{% extends "it_admin/base.html" %}
+{% block title %}Provision Officer{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}" class="{% if creating %}active{% endif %}">Provision officer</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Provision officer</h2>
+    <p class="muted small">
+      New officers are created in <strong>INVITED</strong> status and complete secure activation themselves.
+      Provisioning creates an <em>identity</em> only — operational authorization is managed separately.
+    </p>
+  </div>
+  <div class="page-head__actions"><a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_create' %}?reset=1">Start over</a></div>
+</div>
 
-{% block content %}
-<h2>{% if creating %}Provision officer{% else %}Edit officer {{ officer.officer_id }}{% endif %}</h2>
-<p class="muted small">
-  {% if creating %}
-  New officers are created in <strong>INVITED</strong> status. They complete secure
-  activation with the provisional credentials issued here.
-  {% else %}
-  Authorization attributes (role, clearance, unit, portals). Rank and department are
-  descriptive only — they carry no access weight.
-  {% endif %}
-</p>
+<ol class="steps">
+  {% for name in steps %}
+    <li class="{% if name == step %}steps__current{% elif name in data %}steps__done{% endif %}">
+      <span class="steps__num">{{ forloop.counter }}</span> {{ name|title }}
+    </li>
+  {% endfor %}
+  <li class="{% if step == 'create' %}steps__current{% endif %}"><span class="steps__num">5</span> Create</li>
+</ol>
 
 <div class="panel">
-  {% if form.non_field_errors %}
-    <div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+  {% if legacy_errors %}
+    <div class="form-errors"><ul>{% for field, errs in legacy_errors.items %}{% for e in errs %}<li><strong>{{ field }}</strong>: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>
   {% endif %}
-  <form method="post" novalidate>
-    {% csrf_token %}
-    <div class="cap-grid">
-      {% for field in form %}
-        <div class="field">
-          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-          {{ field }}
-          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-          {% for e in field.errors %}<div class="error">{{ e }}</div>{% endfor %}
-        </div>
-      {% endfor %}
+
+  {% if step == "identity" %}
+    <h3>1 · Identity</h3>
+    <form method="post" novalidate>
+      {% csrf_token %}<input type="hidden" name="step" value="identity">
+      {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+      <div class="form-grid">{% include "it_admin/_partials/form_fields.html" %}</div>
+      <button type="submit" class="btn btn--primary">Continue to service details</button>
+    </form>
+
+  {% elif step == "service" %}
+    <h3>2 · Service</h3>
+    <p class="small muted">Designation, department and unit are descriptive service attributes. They carry <strong>no</strong> access weight.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}<input type="hidden" name="step" value="service">
+      {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+      <div class="form-grid">{% include "it_admin/_partials/form_fields.html" %}</div>
+      <a class="btn btn--ghost" href="?step=identity">Back</a>
+      <button type="submit" class="btn btn--primary">Continue to account</button>
+    </form>
+
+  {% elif step == "account" %}
+    <h3>3 · Account</h3>
+    {% if not may_authorize %}
+      <p class="notice small">You can create the identity but cannot assign role, clearance or portals — an administrator holding <span class="mono">officer.authorization</span> does that separately.</p>
+    {% endif %}
+    <form method="post" novalidate autocomplete="off">
+      {% csrf_token %}<input type="hidden" name="step" value="account">
+      {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+      <div class="form-grid">{% include "it_admin/_partials/form_fields.html" %}</div>
+      <a class="btn btn--ghost" href="?step=service">Back</a>
+      <button type="submit" class="btn btn--primary">Review</button>
+    </form>
+
+  {% elif step == "review" %}
+    <h3>4 · Review</h3>
+    <div class="two-col">
+      <dl class="kv">
+        <dt>Full name</dt><dd>{{ review.identity.full_name }}</dd>
+        <dt>Officer ID</dt><dd class="mono">{{ review.identity.officer_id|default:"auto-generated" }}</dd>
+        <dt>Employee ID</dt><dd class="mono">{{ review.identity.employee_id|default:"—" }}</dd>
+        <dt>Email</dt><dd>{{ review.identity.email }}</dd>
+        <dt>Phone</dt><dd>{{ review.identity.phone|default:"—" }}</dd>
+      </dl>
+      <dl class="kv">
+        <dt>Designation</dt><dd>{{ review.service.designation|default:"—" }}</dd>
+        <dt>Department</dt><dd>{{ review.service.department|default:"—" }}</dd>
+        <dt>Unit</dt><dd>{{ review.service.unit|default:"—" }}</dd>
+        <dt>Supervisor</dt><dd>{{ review.service.supervisor|default:"—" }}</dd>
+        <dt>Joining date</dt><dd>{{ review.service.joining_date|default:"—" }}</dd>
+        <dt>Initial status</dt><dd><span class="badge badge--invited">INVITED</span></dd>
+        <dt>Security code</dt><dd>{% if review.account.has_secret_code %}Will be set{% else %}Officer sets during activation{% endif %}</dd>
+        {% if may_authorize %}
+        <dt>Role</dt><dd>{{ review.account.role|default:"— (none)" }}</dd>
+        <dt>Clearance</dt><dd>{{ review.account.clearance|default:"— (none)" }}</dd>
+        <dt>Portals</dt><dd>{% for p in review.account.portals %}<span class="badge badge--info">{{ p.key }}</span> {% empty %}—{% endfor %}</dd>
+        {% endif %}
+      </dl>
     </div>
-    <button type="submit" class="btn btn--primary">{% if creating %}Create officer{% else %}Save changes{% endif %}</button>
-  </form>
+    <form method="post">
+      {% csrf_token %}<input type="hidden" name="step" value="review"><input type="hidden" name="confirm" value="1">
+      <a class="btn btn--ghost" href="?step=account">Back</a>
+      <button type="submit" class="btn btn--primary">Create officer identity</button>
+    </form>
+  {% endif %}
 </div>
 {% endblock %}

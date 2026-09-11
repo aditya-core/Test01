@@ -1,0 +1,66 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Access Reviews{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Access reviews</h2>
+    <p class="muted small">Periodic (every {{ interval_days }} days) and event-driven (transfers) reviews of administrative access. Decisions: KEEP, MODIFY or REVOKE. Investigation authorization is reviewed separately.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>Pending ({{ pending|length }})</h3>
+  {% if pending %}
+  <table class="table">
+    <thead><tr><th>Officer</th><th>Trigger</th><th>Raised</th><th>Due</th><th>By</th><th></th></tr></thead>
+    <tbody>{% for r in pending %}
+      <tr>
+        <td><a href="{% url 'it_admin:officer_detail' r.officer.pk %}" class="mono">{{ r.officer.officer_id }}</a><div class="small muted">{{ r.officer.full_name }}</div></td>
+        <td class="small">{{ r.trigger }}</td>
+        <td class="small">{{ r.created_at|date:"Y-m-d" }}</td>
+        <td class="small {% if r.is_overdue %}text-danger{% endif %}">{{ r.due_at|date:"Y-m-d" }}</td>
+        <td class="mono small">{{ r.created_by.officer_id|default:"system" }}</td>
+        <td><a class="btn btn--primary btn--sm" href="{% url 'it_admin:access_review_detail' r.pk %}">Review</a></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted small">No pending reviews.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h3>Administrative access due for periodic review ({{ due|length }})</h3>
+  {% if due %}
+  <table class="table table--compact">
+    <thead><tr><th>Officer</th><th>Role</th><th>Last review</th><th></th></tr></thead>
+    <tbody>{% for o in due %}
+      <tr>
+        <td><a href="{% url 'it_admin:officer_detail' o.pk %}" class="mono">{{ o.officer_id }}</a> <span class="small muted">{{ o.full_name }}</span></td>
+        <td class="small">{{ o.role.name|default:"—" }}</td>
+        <td class="small">{{ o.last_review_at|date:"Y-m-d"|default:"never" }}</td>
+        <td>{% if o.pk != request.user.pk %}<form method="post" action="{% url 'it_admin:access_review_raise' o.pk %}" class="inline">{% csrf_token %}<input type="hidden" name="trigger" value="Periodic access review"><button class="btn btn--ghost btn--sm" type="submit">Open review</button></form>{% else %}<span class="small muted">own account</span>{% endif %}</td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted small">All administrative access has been reviewed within the interval.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h3>Recently completed</h3>
+  {% if completed %}
+  <table class="table table--compact">
+    <thead><tr><th>Officer</th><th>Trigger</th><th>Decision</th><th>Reviewer</th><th>When</th><th>Note</th></tr></thead>
+    <tbody>{% for r in completed %}
+      <tr>
+        <td class="mono small"><a href="{% url 'it_admin:access_review_detail' r.pk %}">{{ r.officer.officer_id }}</a></td>
+        <td class="small">{{ r.trigger }}</td>
+        <td><span class="badge badge--{% if r.decision == 'KEEP' %}success{% elif r.decision == 'REVOKE' %}deny{% else %}warning{% endif %}">{{ r.decision }}</span></td>
+        <td class="mono small">{{ r.reviewed_by.officer_id|default:"—" }}</td>
+        <td class="small">{{ r.reviewed_at|date:"Y-m-d H:i" }}</td>
+        <td class="small muted">{{ r.decision_note|default:"—" }}</td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted small">No completed reviews yet.</p>{% endif %}
+</div>
+{% endblock %}

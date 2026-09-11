@@ -1,88 +1,197 @@
-{% extends "portal/base.html" %}
+{% extends "it_admin/base.html" %}
 {% block title %}Officer {{ officer.officer_id }}{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
-
-{% block content %}
-<h2>{{ officer.officer_id }} — {{ officer.full_name }}</h2>
-
-<div class="panel">
-  <div class="cap-grid">
-    <div class="cap"><div class="cap__k">Status</div><div class="cap__v"><span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span></div></div>
-    <div class="cap"><div class="cap__k">Email</div><div class="cap__v">{{ officer.email }}</div></div>
-    <div class="cap"><div class="cap__k">Phone</div><div class="cap__v">{{ officer.phone|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">Rank</div><div class="cap__v">{{ officer.rank|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">Department</div><div class="cap__v">{{ officer.department|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">Role</div><div class="cap__v">{{ officer.role.name|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">Clearance</div><div class="cap__v">{{ officer.clearance|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">Unit</div><div class="cap__v">{{ officer.unit.name|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">MFA</div><div class="cap__v">{% if officer.secret_code_configured %}Configured{% else %}Not configured{% endif %}</div></div>
-    <div class="cap"><div class="cap__k">Failed attempts</div><div class="cap__v">{{ officer.failed_login_attempts }}</div></div>
-    <div class="cap"><div class="cap__k">Last login</div><div class="cap__v">{{ officer.last_login|default:"—" }}</div></div>
-    <div class="cap"><div class="cap__k">Created</div><div class="cap__v">{{ officer.created_at|date:"Y-m-d H:i" }}</div></div>
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / {{ officer.officer_id }}</p>
+    <h2>{{ officer.full_name }} <span class="mono muted">{{ officer.officer_id }}</span></h2>
+    <p class="small">
+      <span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span>
+      {% if officer.is_locked_out %}<span class="badge badge--locked">temporary lockout until {{ officer.locked_until|date:"H:i" }}</span>{% endif %}
+      {% if officer.is_superuser %}<span class="badge badge--warning">superuser</span>{% endif %}
+      {% if pending_review %}<span class="badge badge--warning">access review pending</span>{% endif %}
+      {% for r in pending_approvals %}<span class="badge badge--info">approval pending: {{ r.get_action_display }}</span>{% endfor %}
+    </p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_timeline' officer.pk %}">Timeline</a>
+    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_access' officer.pk %}">Why? (access)</a>
+    {% if "officer.update" in admin_perms %}<a class="btn btn--primary btn--sm" href="{% url 'it_admin:officer_edit' officer.pk %}">Edit identity</a>{% endif %}
   </div>
 </div>
 
-<div class="panel">
-  <h3>Portal access</h3>
-  {% for access in portals %}
-    <span class="badge badge--info">{{ access.portal.key }}</span>
-    {% if access.revoked_at %}<span class="badge badge--danger">revoked</span>{% endif %}
-  {% empty %}
-    <span class="muted">No portal grants.</span>
-  {% endfor %}
+<div class="two-col">
+  <div class="panel">
+    <h3>Identity</h3>
+    <dl class="kv">
+      <dt>Full name</dt><dd>{{ officer.full_name }}</dd>
+      <dt>Officer ID</dt><dd class="mono">{{ officer.officer_id }}</dd>
+      <dt>Employee ID</dt><dd class="mono">{{ officer.employee_id|default:"—" }}</dd>
+      <dt>Official email</dt><dd>{{ officer.email }}</dd>
+      <dt>Official phone</dt><dd>{{ officer.phone|default:"—" }}</dd>
+      <dt>Created</dt><dd>{{ officer.created_at|date:"Y-m-d H:i" }}</dd>
+    </dl>
+  </div>
+
+  <div class="panel">
+    <h3>Service</h3>
+    <dl class="kv">
+      <dt>Rank / designation</dt><dd>{{ officer.designation.name|default:officer.rank|default:"—" }}{% if officer.designation.rank_level %} <span class="muted small">(level {{ officer.designation.rank_level }})</span>{% endif %}</dd>
+      <dt>Department</dt><dd>{{ officer.department.name|default:officer.legacy_department|default:"—" }}</dd>
+      <dt>Unit / posting</dt><dd>{{ officer.unit.name|default:"—" }}{% if officer.unit %} <span class="muted small">· {{ officer.unit.organization.name }}</span>{% endif %}</dd>
+      <dt>Supervisor</dt><dd>{% if officer.supervisor %}<a href="{% url 'it_admin:officer_detail' officer.supervisor.pk %}">{{ officer.supervisor.officer_id }}</a> — {{ officer.supervisor.full_name }}{% else %}—{% endif %}</dd>
+      <dt>Joining date</dt><dd>{{ officer.joining_date|date:"Y-m-d"|default:"—" }}</dd>
+    </dl>
+    <div class="actions">
+      {% if "officer.transfer" in admin_perms %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_transfer' officer.pk %}">Transfer / posting</a>{% endif %}
+    </div>
+    {% if postings %}
+    <h4>Posting history</h4>
+    <table class="table table--compact">
+      <thead><tr><th>Effective</th><th>Kind</th><th>From</th><th>To</th></tr></thead>
+      <tbody>
+      {% for p in postings %}
+        <tr>
+          <td class="small">{{ p.effective_date|date:"Y-m-d" }}</td>
+          <td class="small">{{ p.get_kind_display }}{% if p.authorization_review_required %} <span class="badge badge--warning">review</span>{% endif %}</td>
+          <td class="small">{{ p.from_department.name|default:"—" }} / {{ p.from_unit.name|default:"—" }} / {{ p.from_designation.name|default:"—" }}</td>
+          <td class="small">{{ p.to_department.name|default:"—" }} / {{ p.to_unit.name|default:"—" }} / {{ p.to_designation.name|default:"—" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
 </div>
 
-{% if officer.account_status == "INVITED" or officer.account_status == "PENDING" %}
-<div class="panel">
-  <h3>Activation</h3>
-  <p class="small muted">Share this link with the officer through a secure channel:</p>
-  <p><code class="mono small" style="word-break:break-all;">{{ activation_link }}</code></p>
-</div>
-{% endif %}
-
-<div class="panel">
-  <h3>Actions</h3>
-  <div style="display:flex; flex-wrap:wrap; gap:8px;">
-    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_edit' officer.pk %}">Edit attributes</a>
-    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_reset_password' officer.pk %}">Reset password</a>
-    <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_reset_code' officer.pk %}">Reset security code</a>
-
-    {% if officer.account_status != "ACTIVE" and officer.account_status != "LOCKED" %}
-    <form method="post" action="{% url 'it_admin:officer_status' officer.pk %}" style="display:inline;">
-      {% csrf_token %}<input type="hidden" name="status" value="ACTIVE">
-      <button class="btn btn--primary btn--sm" type="submit">Activate</button>
-    </form>
+<div class="two-col">
+  <div class="panel">
+    <h3>Account</h3>
+    <dl class="kv">
+      <dt>Status</dt><dd><span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span></dd>
+      <dt>Role</dt><dd>{{ officer.role.name|default:"—" }}</dd>
+      <dt>Clearance</dt><dd>{{ officer.clearance|default:"—" }}</dd>
+      <dt>Portals</dt><dd>
+        {% for access in portals %}{% if not access.revoked_at %}<span class="badge badge--info">{{ access.portal.key }}</span> {% endif %}{% empty %}<span class="muted">none</span>{% endfor %}
+      </dd>
+      <dt>MFA</dt><dd>{% if officer.secret_code_configured %}Configured{% else %}<span class="badge badge--warning">Not configured</span>{% endif %}</dd>
+      <dt>Failed attempts</dt><dd>{{ officer.failed_login_attempts }}</dd>
+      <dt>Last login</dt><dd>{{ officer.last_login|date:"Y-m-d H:i"|default:"—" }}</dd>
+    </dl>
+    <p class="small muted">Operational authorization (cases, evidence, documents) is managed separately.</p>
+    <div class="actions">
+      {% if "officer.authorization" in admin_perms %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_authorization' officer.pk %}">Role, clearance &amp; portals</a>{% endif %}
+      {% if "account.manage_security" in admin_perms %}
+        <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_reset_password' officer.pk %}">Reset password</a>
+        <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_reset_code' officer.pk %}">Reset security code</a>
+      {% endif %}
+    </div>
+    {% if activation_link %}
+    <h4>Activation</h4>
+    <p class="small muted">Share this link with the officer through a secure channel:</p>
+    <p><code class="mono small" style="word-break:break-all;">{{ activation_link }}</code></p>
     {% endif %}
-    {% if officer.account_status != "SUSPENDED" %}
-    <form method="post" action="{% url 'it_admin:officer_status' officer.pk %}" style="display:inline;">
-      {% csrf_token %}<input type="hidden" name="status" value="SUSPENDED">
-      <button class="btn btn--gold btn--sm" type="submit">Suspend</button>
-    </form>
-    {% endif %}
-    {% if officer.account_status != "DISABLED" %}
-    <form method="post" action="{% url 'it_admin:officer_status' officer.pk %}" style="display:inline;">
-      {% csrf_token %}<input type="hidden" name="status" value="DISABLED">
-      <button class="btn btn--danger btn--sm" type="submit">Disable</button>
-    </form>
-    {% endif %}
+  </div>
 
-    {% if not officer.locked_until %}
-    <form method="post" action="{% url 'it_admin:officer_lock' officer.pk %}" style="display:inline;">
-      {% csrf_token %}<button class="btn btn--gold btn--sm" type="submit">Lock</button>
-    </form>
+  <div class="panel">
+    <h3>Account lifecycle</h3>
+    {% if is_self %}
+      <p class="notice small">You cannot suspend, lock or deactivate your own account.</p>
     {% else %}
-    <form method="post" action="{% url 'it_admin:officer_unlock' officer.pk %}" style="display:inline;">
-      {% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">Unlock</button>
-    </form>
+    <div class="actions">
+      {% if "officer.suspend" in admin_perms %}
+        {% if transitions.suspend %}
+          {% url 'it_admin:officer_lifecycle' officer.pk as lifecycle_url %}
+          {% include "it_admin/_partials/reason_action.html" with action_url=lifecycle_url label="Suspend" tone="gold" hidden=suspend_hidden confirm_text="Suspend authentication and terminate active sessions. Reversible." %}
+        {% endif %}
+        {% if not officer.account_status == "LOCKED" or officer.locked_until %}
+          {% url 'it_admin:officer_lock' officer.pk as lock_url %}
+          {% include "it_admin/_partials/reason_action.html" with action_url=lock_url label="Emergency lock" tone="danger" confirm_text="Immediately block authentication, terminate all sessions and revoke registered devices. Requires an administrator to unlock." %}
+        {% endif %}
+        {% if transitions.deactivate %}
+          {% url 'it_admin:officer_lifecycle' officer.pk as lifecycle_url %}
+          {% include "it_admin/_partials/reason_action.html" with action_url=lifecycle_url label="Deactivate" tone="danger" hidden=deactivate_hidden confirm_text="Permanently close the account. History is preserved; privileged accounts require a second administrator." %}
+        {% endif %}
+      {% endif %}
+      {% if "officer.reactivate" in admin_perms %}
+        {% if transitions.reactivate %}
+          {% url 'it_admin:officer_lifecycle' officer.pk as lifecycle_url %}
+          {% include "it_admin/_partials/reason_action.html" with action_url=lifecycle_url label="Reactivate" tone="primary" hidden=reactivate_hidden confirm_text="Restore authentication for this account." %}
+        {% endif %}
+        {% if officer.account_status == "LOCKED" or officer.locked_until %}
+          {% url 'it_admin:officer_unlock' officer.pk as unlock_url %}
+          {% include "it_admin/_partials/reason_action.html" with action_url=unlock_url label="Unlock" tone="primary" confirm_text="Clear the lock and reset failed-attempt counters." %}
+        {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+    <p class="small muted">Every lifecycle action requires a reason and is recorded with previous and new state.</p>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Security</h3>
+    {% if devices is not None %}
+    <h4>Registered devices <a class="small" href="{% url 'it_admin:officer_devices_sessions' officer.pk %}">manage</a></h4>
+    {% if devices %}
+    <table class="table table--compact">
+      <thead><tr><th>Device</th><th>First seen</th><th>Last seen</th><th>Status</th></tr></thead>
+      <tbody>{% for d in devices %}
+        <tr><td class="small">{{ d.label }}</td><td class="small">{{ d.first_seen|date:"Y-m-d" }}</td><td class="small">{{ d.last_seen|date:"Y-m-d H:i" }}</td><td><span class="badge badge--{{ d.status|lower }}">{{ d.status }}</span></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}<p class="muted small">No devices registered yet.</p>{% endif %}
+    {% endif %}
+    {% if sessions is not None %}
+    <h4>Recent sessions</h4>
+    {% if sessions %}
+    <table class="table table--compact">
+      <thead><tr><th>Started</th><th>Portal</th><th>IP</th><th>State</th></tr></thead>
+      <tbody>{% for s in sessions %}
+        <tr><td class="small">{{ s.started_at|date:"Y-m-d H:i" }}</td><td class="small">{{ s.portal|default:"—" }}</td><td class="mono small">{{ s.ip_address|default:"—" }}</td>
+          <td>{% if s.ended_at %}<span class="badge badge--info">{{ s.end_reason|default:"ended" }}</span>{% else %}<span class="badge badge--success">active</span>{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}<p class="muted small">No sessions recorded.</p>{% endif %}
+    {% endif %}
+    {% if security_events is not None %}
+    <h4>Security events</h4>
+    {% if security_events %}
+    <ul class="event-list small">{% for e in security_events %}
+      <li><span class="badge badge--{{ e.severity|lower }}">{{ e.severity }}</span> <span class="mono">{{ e.occurred_at|date:"Y-m-d H:i" }}</span> {{ e.event_type }} {% if e.ip_address %}<span class="muted">from {{ e.ip_address }}</span>{% endif %}</li>
+    {% endfor %}</ul>
+    {% else %}<p class="muted small">No security events.</p>{% endif %}
+    {% endif %}
+    {% if devices is None and sessions is None and security_events is None %}<p class="muted small">You are not authorized to view security details.</p>{% endif %}
+  </div>
+
+  <div class="panel">
+    <h3>Admin history</h3>
+    {% if recent_changes %}
+    <table class="table table--compact">
+      <thead><tr><th>Time</th><th>Actor</th><th>Event</th><th>Result</th></tr></thead>
+      <tbody>{% for e in recent_changes %}
+        <tr><td class="small mono">{{ e.occurred_at|date:"Y-m-d H:i" }}</td><td class="small mono">{{ e.actor.officer_id|default:"system" }}</td><td class="small">{{ e.event_type }}{% if e.reason %}<div class="muted">{{ e.reason }}</div>{% endif %}</td><td><span class="badge badge--{{ e.result|lower|default:'info' }}">{{ e.result|default:"—" }}</span></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    <p class="small"><a href="{% url 'it_admin:officer_timeline' officer.pk %}">Full timeline →</a></p>
+    {% else %}<p class="muted small">No administrative changes recorded.</p>{% endif %}
+
+    {% if temporary_grants %}
+    <h4>Temporary capabilities</h4>
+    <ul class="event-list small">{% for g in temporary_grants %}
+      <li><span class="mono">{{ g.permission.codename }}</span> — <span class="badge badge--{% if g.is_currently_active %}success{% else %}info{% endif %}">{{ g.effective_status }}</span> until {{ g.expires_at|date:"Y-m-d H:i" }}</li>
+    {% endfor %}</ul>
+    {% endif %}
+    {% if "access.review" in admin_perms %}
+    <div class="actions">
+      {% if pending_review %}<a class="btn btn--gold btn--sm" href="{% url 'it_admin:access_review_detail' pending_review.pk %}">Open pending access review</a>
+      {% elif not is_self %}
+      <form method="post" action="{% url 'it_admin:access_review_raise' officer.pk %}">{% csrf_token %}<input type="hidden" name="trigger" value="Manual access review"><button class="btn btn--ghost btn--sm" type="submit">Raise access review</button></form>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
 </div>

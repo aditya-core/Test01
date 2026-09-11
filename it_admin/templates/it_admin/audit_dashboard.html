@@ -1,42 +1,65 @@
-{% extends "portal/base.html" %}
-{% block title %}Audit Logs{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
+{% extends "it_admin/base.html" %}
+{% block title %}Audit Log{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
-<div class="nav-section">Security</div>
-<a href="{% url 'it_admin:security_dashboard' %}">Security monitoring</a>
-<div class="nav-section">Accountability</div>
-<a href="{% url 'it_admin:audit_dashboard' %}" class="active">Audit logs</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Audit log</h2>
+    <p class="muted small">Append-only record of security-sensitive and administrative events — allowed and denied. Entries cannot be edited or deleted; each is linked to its predecessor by a hash so tampering is detectable.</p>
+  </div>
+  <div class="page-head__actions">
+    <form method="post" action="{% url 'it_admin:audit_verify' %}">{% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">Verify chain integrity</button></form>
+  </div>
+</div>
 
-{% block content %}
-<h2>Audit logs</h2>
-<p class="muted small">Immutable record of security-sensitive events — allowed and denied.</p>
+{% if chain %}
+<div class="notice {% if not chain.ok %}notice--danger{% endif %}">
+  {% if chain.ok %}<strong>Chain intact.</strong> {{ chain.checked }} event{{ chain.checked|pluralize }} verified{% if chain.unchained %} ({{ chain.unchained }} legacy event{{ chain.unchained|pluralize }} predate the chain){% endif %}.
+  {% else %}<strong>Chain broken</strong> at sequence {{ chain.first_break }} after verifying {{ chain.checked }} event{{ chain.checked|pluralize }}. Escalate to the security administrator.{% endif %}
+</div>
+{% endif %}
+
+<form method="get" class="filter-bar">
+  <div class="filter-bar__grow"><input type="text" name="q" value="{{ q }}" placeholder="Officer ID, actor, resource or reason"></div>
+  <select name="type">
+    <option value="">Any event type</option>
+    {% for t in types %}<option value="{{ t }}" {% if t == event_type %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  <label class="small"><input type="checkbox" name="admin" value="1" {% if admin_only %}checked{% endif %}> administrative only</label>
+  <button class="btn btn--primary btn--sm" type="submit">Filter</button>
+  {% if q or event_type or admin_only %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:audit_dashboard' %}">Clear</a>{% endif %}
+</form>
 
 <table class="table">
   <thead>
-    <tr><th>Time</th><th>Event</th><th>Officer</th><th>Portal</th><th>Resource</th><th>Action</th><th>Result</th></tr>
+    <tr><th>#</th><th>Time</th><th>Actor</th><th>Event</th><th>Target</th><th>Change</th><th>Result</th></tr>
   </thead>
   <tbody>
     {% for e in events %}
     <tr>
+      <td class="mono small muted">{{ e.sequence|default:"—" }}</td>
       <td class="mono small">{{ e.occurred_at|date:"Y-m-d H:i:s" }}</td>
-      <td class="mono small">{{ e.event_type }}</td>
-      <td>{{ e.officer_id_snapshot|default:"—" }}</td>
-      <td>{{ e.portal|default:"—" }}</td>
-      <td class="mono small">{{ e.resource_type }}{% if e.resource_id %} {{ e.resource_id }}{% endif %}</td>
-      <td>{{ e.action|default:"—" }}</td>
-      <td><span class="badge badge--{% if e.result == 'ALLOW' or e.result == 'SUCCESS' %}success{% elif e.result == 'DENY' %}deny{% else %}info{% endif %}">{{ e.result|default:"—" }}</span></td>
+      <td class="mono small">{{ e.actor.officer_id|default:"system" }}</td>
+      <td class="small"><span class="mono">{{ e.event_type }}</span>{% if e.action %}<div class="muted">{{ e.action }}</div>{% endif %}</td>
+      <td class="small">
+        {% if e.officer %}<a href="{% url 'it_admin:officer_detail' e.officer.pk %}">{{ e.officer_id_snapshot }}</a>{% else %}{{ e.officer_id_snapshot|default:"" }}{% endif %}
+        {% if e.resource_type %}<div class="muted mono">{{ e.resource_type }}{% if e.resource_id %} {{ e.resource_id }}{% endif %}</div>{% endif %}
+        {% if e.portal %}<div class="muted">{{ e.portal }}</div>{% endif %}
+      </td>
+      <td class="small">
+        {% if e.previous_state or e.new_state %}
+          <details><summary>prev → new</summary>
+            <div class="diff"><div><span class="muted">previous</span><pre class="mono">{{ e.previous_state|default:"{}" }}</pre></div><div><span class="muted">new</span><pre class="mono">{{ e.new_state|default:"{}" }}</pre></div></div>
+          </details>
+        {% endif %}
+        {% if e.reason %}<div class="muted">Reason: {{ e.reason }}</div>{% endif %}
+      </td>
+      <td><span class="badge badge--{% if e.result == 'ALLOW' or e.result == 'SUCCESS' %}success{% elif e.result == 'DENY' or e.result == 'FAILURE' %}deny{% else %}info{% endif %}">{{ e.result|default:"—" }}</span></td>
     </tr>
     {% empty %}
     <tr><td colspan="7" class="muted">No audit events recorded.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+{% include "it_admin/_partials/pagination.html" %}
 {% endblock %}

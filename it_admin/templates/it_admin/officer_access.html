@@ -1,0 +1,50 @@
+{% extends "it_admin/base.html" %}
+{% load it_admin_extras %}
+{% block title %}Access — {{ officer.officer_id }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / <a href="{% url 'it_admin:officer_detail' officer.pk %}">{{ officer.officer_id }}</a> / Why?</p>
+<h2>Why does {{ officer.full_name }} have this access?</h2>
+<p class="muted small">Explains <strong>administrative</strong> capabilities resolved by the authorization engine (role + active temporary grants).
+  {% if operational_count %}The role also carries {{ operational_count }} operational permission{{ operational_count|pluralize }} — <strong>operational authorization is managed separately</strong> and is not explained here.{% endif %}</p>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Ask about a capability</h3>
+    <form method="get" class="filter-bar">
+      <select name="capability">
+        <option value="">— choose —</option>
+        {% for c in all_admin_capabilities %}<option value="{{ c }}" {% if c == codename %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+      <button class="btn btn--primary btn--sm" type="submit">Explain</button>
+    </form>
+    {% if single %}
+    <dl class="kv">
+      <dt>WHAT</dt><dd class="mono">{{ single.what }}</dd>
+      <dt>WHY</dt><dd>{{ single.why }}</dd>
+      <dt>SOURCE</dt><dd class="mono">{{ single.source|default:"—" }}</dd>
+      <dt>STATUS</dt><dd><span class="badge badge--{% if single.granted %}success{% else %}info{% endif %}">{{ single.status }}</span>{% if single.expires_at %} <span class="small muted">until {{ single.expires_at|date:"Y-m-d H:i" }}</span>{% endif %}</dd>
+    </dl>
+    {% elif codename %}<p class="muted small">Unknown capability.</p>{% endif %}
+  </div>
+
+  <div class="panel">
+    <h3>Capabilities currently held ({{ explanations|length }})</h3>
+    {% if explanations %}
+    <table class="table table--compact">
+      <thead><tr><th>What</th><th>Why</th><th>Source</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for x in explanations %}
+        <tr>
+          <td class="mono small">{{ x.what }}</td>
+          <td class="small">{{ x.why }}</td>
+          <td class="mono small">{{ x.source|default:"—" }}</td>
+          <td><span class="badge badge--{% if x.status == 'TEMPORARY' %}warning{% else %}success{% endif %}">{{ x.status }}</span>{% if x.expires_at %}<div class="small muted">until {{ x.expires_at|date:"Y-m-d H:i" }}</div>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted small">No administrative capabilities. {% if officer.role %}Role <strong>{{ officer.role.name }}</strong> is operational only.{% else %}No role assigned.{% endif %}</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

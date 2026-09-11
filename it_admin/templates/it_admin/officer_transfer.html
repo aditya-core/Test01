@@ -1,0 +1,51 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Transfer — {{ officer.officer_id }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / <a href="{% url 'it_admin:officer_detail' officer.pk %}">{{ officer.officer_id }}</a> / Transfer</p>
+<h2>Transfer / posting — {{ officer.full_name }}</h2>
+<p class="muted small">Current: <strong>{{ officer.department.name|default:"—" }}</strong> / <strong>{{ officer.unit.name|default:"—" }}</strong> / <strong>{{ officer.designation.name|default:"—" }}</strong>.
+  The previous posting is preserved in history; nothing is overwritten.</p>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>New posting</h3>
+    {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% include "it_admin/_partials/form_fields.html" %}
+      {% if plan %}
+        <input type="hidden" name="confirm" value="1">
+        <button type="submit" class="btn btn--gold">Confirm and apply transfer</button>
+        <a class="btn btn--ghost" href="{% url 'it_admin:officer_transfer' officer.pk %}">Reset</a>
+      {% else %}
+        <button type="submit" class="btn btn--primary">Preview change summary</button>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>Change summary</h3>
+    {% if plan %}
+      {% if plan.has_changes %}
+      <table class="table table--compact">
+        <thead><tr><th>Attribute</th><th>From</th><th>To</th></tr></thead>
+        <tbody>{% for c in plan.changes %}<tr><td>{{ c.field }}</td><td>{{ c.from }}</td><td><strong>{{ c.to }}</strong></td></tr>{% endfor %}</tbody>
+      </table>
+      <dl class="kv">
+        <dt>Effective date</dt><dd>{{ plan.effective_date }}</dd>
+        <dt>Reason</dt><dd>{{ plan.reason }}</dd>
+        <dt>Recorded by</dt><dd class="mono">{{ request.user.officer_id }}</dd>
+      </dl>
+      {% if plan.authorization_review_required %}
+        <div class="notice">Organizational scope changes. An <strong>access review</strong> will be raised — operational authorization is managed separately and is not changed by this transfer.</div>
+      {% endif %}
+      {% else %}
+      <p class="muted">No changes detected.</p>
+      {% endif %}
+    {% else %}
+      <p class="muted small">Fill in the new posting and preview the change summary before applying.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% if rows %}
+<table class="table">
+  <thead><tr><th>Officer</th><th>Status</th><th>Role</th><th>Unit</th><th>Last login</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for o in rows %}
+    <tr>
+      <td><a href="{% url 'it_admin:officer_detail' o.pk %}"><span class="mono">{{ o.officer_id }}</span></a><div class="small muted">{{ o.full_name }}</div></td>
+      <td><span class="badge badge--{{ o.account_status|lower }}">{{ o.account_status }}</span>{% if o.is_locked_out %} <span class="badge badge--locked">lockout</span>{% endif %}</td>
+      <td class="small">{{ o.role.name|default:"—" }}</td>
+      <td class="small">{{ o.unit.name|default:"—" }}</td>
+      <td class="small">{{ o.last_login|date:"Y-m-d H:i"|default:"—" }}</td>
+      <td>
+        {% if o.pk == request.user.pk %}<span class="small muted">own account</span>{% else %}
+        <div class="actions">
+          {% url 'it_admin:officer_lifecycle' o.pk as lifecycle_url %}
+          {% url 'it_admin:account_security' as next_url %}
+          {% if can_suspend and o.account_status == "ACTIVE" %}
+            {% include "it_admin/_partials/reason_action.html" with action_url=lifecycle_url label="Suspend" tone="gold" hidden=suspend_hidden next=next_url %}
+          {% endif %}
+          {% if can_suspend and o.account_status != "LOCKED" or o.locked_until %}
+            {% url 'it_admin:officer_lock' o.pk as lock_url %}
+            {% include "it_admin/_partials/reason_action.html" with action_url=lock_url label="Emergency lock" tone="danger" next=next_url %}
+          {% endif %}
+          {% if can_reactivate and o.account_status == "SUSPENDED" or can_reactivate and o.account_status == "LOCKED" and not o.locked_until %}
+            {% include "it_admin/_partials/reason_action.html" with action_url=lifecycle_url label="Reactivate" tone="primary" hidden=reactivate_hidden next=next_url %}
+          {% endif %}
+          {% if can_reactivate and o.locked_until or can_reactivate and o.account_status == "LOCKED" %}
+            {% url 'it_admin:officer_unlock' o.pk as unlock_url %}
+            {% include "it_admin/_partials/reason_action.html" with action_url=unlock_url label="Unlock" tone="primary" next=next_url %}
+          {% endif %}
+          <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_detail' o.pk %}">Profile</a>
+        </div>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted small">None.</p>{% endif %}

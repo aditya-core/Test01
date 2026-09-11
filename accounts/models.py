@@ -75,6 +75,15 @@ class OrganizationUnit(models.Model):
         related_name="children",
         help_text="Optional parent unit for nested units.",
     )
+    department = models.ForeignKey(
+        "Department",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="units",
+        help_text="Functional department this unit belongs to (Department → Unit → Officer).",
+    )
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -95,6 +104,77 @@ class OrganizationUnit(models.Model):
             chain.append(node)
             node = node.parent
         return chain
+
+
+# ---------------------------------------------------------------------------
+# Department registry (functional grouping: Cyber Crime, CID, Administration…)
+# ---------------------------------------------------------------------------
+class Department(models.Model):
+    """A functional department. Units belong to departments; officers are
+    posted to a department + unit.
+
+    Purely an *identity / service* attribute — it carries no authorization
+    weight. Operational scope is still decided by ``OrganizationUnit`` /
+    ``Organization`` in the authorization engine.
+    """
+
+    code = models.CharField(max_length=24, unique=True, help_text="Short code, e.g. CYBER.")
+    name = models.CharField(max_length=120, unique=True)
+    description = models.CharField(max_length=255, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if self.code:
+            self.code = self.code.strip().upper()
+
+    @property
+    def officer_count(self) -> int:
+        return self.officers.count()
+
+
+# ---------------------------------------------------------------------------
+# Designation registry (rank / post — descriptive, NOT authorization)
+# ---------------------------------------------------------------------------
+class Designation(models.Model):
+    """A designation such as Constable, Sub-Inspector, Inspector.
+
+    ``rank_level`` is a display/ordering value only. A designation never
+    grants a capability: authorization comes from ``Role`` + clearance + scope.
+    """
+
+    code = models.CharField(max_length=24, unique=True, help_text="Short code, e.g. SI.")
+    name = models.CharField(max_length=120, unique=True)
+    rank_level = models.PositiveSmallIntegerField(
+        default=0, help_text="Ordering only (higher = more senior). Carries NO authorization weight."
+    )
+    description = models.CharField(max_length=255, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-rank_level", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if self.code:
+            self.code = self.code.strip().upper()
+
+    @property
+    def officer_count(self) -> int:
+        return self.officers.count()
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +277,12 @@ class Officer(AbstractBaseUser, PermissionsMixin):
         unique=True,
         help_text="Unique officer identifier (e.g. OFF-052).",
     )
+    employee_id = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="HR / payroll employee number (optional, unique when present).",
+    )
     full_name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=32, blank=True, default="")
@@ -207,9 +293,39 @@ class Officer(AbstractBaseUser, PermissionsMixin):
         default=C.ACCOUNT_STATUS_PENDING,
     )
 
-    # Descriptive attributes (NOT authorization).
+    # Descriptive service attributes (NOT authorization).
+    # ``rank`` is a denormalised label kept in sync with ``designation`` so
+    # that legacy readers (sidebar, capability bundle) keep working.
     rank = models.CharField(max_length=64, blank=True, default="")
-    department = models.CharField(max_length=120, blank=True, default="")
+    designation = models.ForeignKey(
+        Designation,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="officers",
+    )
+    department = models.ForeignKey(
+        Department,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="officers",
+    )
+    legacy_department = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        editable=False,
+        help_text="Free-text department label recorded before the department registry existed.",
+    )
+    supervisor = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="supervisees",
+    )
+    joining_date = models.DateField(null=True, blank=True)
 
     # Authorization attributes.
     role = models.ForeignKey(
@@ -264,6 +380,11 @@ class Officer(AbstractBaseUser, PermissionsMixin):
                 condition=models.Q(officer_id__regex=r"^[A-Z0-9][A-Z0-9\-]*$"),
                 name="officer_id_uppercase",
             ),
+            models.UniqueConstraint(
+                fields=["employee_id"],
+                condition=~models.Q(employee_id=""),
+                name="uniq_officer_employee_id",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -273,6 +394,14 @@ class Officer(AbstractBaseUser, PermissionsMixin):
         super().clean()
         if self.officer_id:
             self.officer_id = self.officer_id.strip().upper()
+        if self.employee_id:
+            self.employee_id = self.employee_id.strip().upper()
+
+    def save(self, *args, **kwargs):
+        # Keep the legacy ``rank`` label aligned with the designation registry.
+        if self.designation_id and self.designation:
+            self.rank = self.designation.name
+        super().save(*args, **kwargs)
 
     # -- Django auth plumbing ----------------------------------------------
     def get_full_name(self) -> str:
@@ -302,16 +431,31 @@ class Officer(AbstractBaseUser, PermissionsMixin):
             portal__key=portal_key, revoked_at__isnull=True
         ).exists()
 
-    def revoke_all_sessions(self):
-        """Invalidate every session this officer holds (used on lock/disable)."""
+    @property
+    def is_blocked(self) -> bool:
+        return self.account_status in C.BLOCKING_STATUSES
+
+    def revoke_all_sessions(self, end_reason: str = C.SESSION_END_ACCOUNT_STATE, actor=None):
+        """Invalidate every session this officer holds (used on lock/disable).
+
+        Also closes the officer's session-registry rows so the device/session
+        views reflect reality. Returns the number of server sessions removed.
+        """
         from django.contrib.sessions.models import Session
         from django.contrib.auth import SESSION_KEY, BACKEND_SESSION_KEY
 
         uid = str(self.pk)
+        removed = 0
         for session in Session.objects.all().iterator():
             data = session.get_decoded()
             if data.get(SESSION_KEY) == uid or data.get(BACKEND_SESSION_KEY) == uid:
                 session.delete()
+                removed += 1
+
+        OfficerSession.objects.filter(officer=self, ended_at__isnull=True).update(
+            ended_at=timezone.now(), end_reason=end_reason, ended_by=actor
+        )
+        return removed
 
 
 # ---------------------------------------------------------------------------
@@ -384,3 +528,182 @@ class AuthenticationFactor(models.Model):
         if not candidate:
             return False
         return SecurityCodeService().verify(candidate, self.secret_hash)
+
+
+# ---------------------------------------------------------------------------
+# Posting history — transfers and designation changes are never overwritten
+# ---------------------------------------------------------------------------
+class PostingHistory(models.Model):
+    """Immutable record of where an officer was posted and as what.
+
+    The *current* posting lives on ``Officer`` (department/unit/designation);
+    every change appends a row here so the past is never destroyed.
+    """
+
+    officer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posting_history"
+    )
+    kind = models.CharField(max_length=24, choices=C.POSTING_KIND_CHOICES, default=C.POSTING_TRANSFER)
+
+    from_department = models.ForeignKey(Department, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    from_unit = models.ForeignKey(OrganizationUnit, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    from_designation = models.ForeignKey(Designation, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+
+    to_department = models.ForeignKey(Department, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    to_unit = models.ForeignKey(OrganizationUnit, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    to_designation = models.ForeignKey(Designation, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+
+    effective_date = models.DateField()
+    reason = models.CharField(max_length=255, blank=True, default="")
+    # Set when the move may affect operational authorization (unit / scope
+    # changed). The IT portal only *flags* this — the authorization domain
+    # decides what, if anything, changes.
+    authorization_review_required = models.BooleanField(default=False)
+
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-effective_date", "-recorded_at"]
+        verbose_name_plural = "posting histories"
+
+    def __str__(self) -> str:
+        return f"{self.officer.officer_id} {self.kind} {self.effective_date}"
+
+
+# ---------------------------------------------------------------------------
+# Device & session registry (lightweight — no invasive fingerprinting)
+# ---------------------------------------------------------------------------
+class RegisteredDevice(models.Model):
+    """A browser/device an officer has signed in from.
+
+    Identified by a random, HttpOnly device cookie (hashed at rest) — not by
+    fingerprinting. Revoking a device ends its sessions; the device must
+    re-register on the next successful sign-in.
+    """
+
+    officer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="devices"
+    )
+    device_key_hash = models.CharField(max_length=64, unique=True, help_text="SHA-256 of the device token.")
+    label = models.CharField(max_length=120, blank=True, default="")
+    browser = models.CharField(max_length=64, blank=True, default="")
+    operating_system = models.CharField(max_length=64, blank=True, default="")
+    user_agent = models.CharField(max_length=300, blank=True, default="")
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+    last_ip = models.GenericIPAddressField(null=True, blank=True)
+    status = models.CharField(max_length=12, choices=C.DEVICE_STATUS_CHOICES, default=C.DEVICE_STATUS_ACTIVE)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    revoke_reason = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["-last_seen"]
+
+    def __str__(self) -> str:
+        return f"{self.officer.officer_id} — {self.browser or 'Unknown'} / {self.operating_system or 'Unknown'}"
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == C.DEVICE_STATUS_ACTIVE
+
+
+class OfficerSession(models.Model):
+    """Registry row for an authenticated session (the server-side session
+    itself is Django's; only a hash of its key is stored here)."""
+
+    officer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions"
+    )
+    session_key_hash = models.CharField(max_length=64, db_index=True)
+    device = models.ForeignKey(
+        RegisteredDevice, null=True, blank=True, on_delete=models.SET_NULL, related_name="sessions"
+    )
+    portal = models.CharField(max_length=16, blank=True, default="")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    browser = models.CharField(max_length=64, blank=True, default="")
+    operating_system = models.CharField(max_length=64, blank=True, default="")
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_activity = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    end_reason = models.CharField(max_length=24, choices=C.SESSION_END_CHOICES, blank=True, default="")
+    ended_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [models.Index(fields=["officer", "ended_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.officer.officer_id} session {self.started_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.ended_at is None
+
+
+# ---------------------------------------------------------------------------
+# Temporary administrative capability (time-boxed, admin domain only)
+# ---------------------------------------------------------------------------
+class TemporaryCapability(models.Model):
+    """A time-boxed grant of an *administrative* capability.
+
+    Evaluated by the authorization engine only while ``starts_at <= now <
+    expires_at`` and status is ACTIVE. Operational permissions (case.*,
+    document.* …) are never grantable here — the engine ignores them.
+    """
+
+    officer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="temporary_capabilities"
+    )
+    permission = models.ForeignKey(Permission, on_delete=models.PROTECT, related_name="temporary_grants")
+    reason = models.CharField(max_length=255)
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    starts_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=C.TEMP_ACCESS_STATUS_CHOICES, default=C.TEMP_ACCESS_ACTIVE)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    revoke_reason = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "temporary capabilities"
+
+    def __str__(self) -> str:
+        return f"{self.officer.officer_id} +{self.permission.codename} until {self.expires_at:%Y-%m-%d %H:%M}"
+
+    def clean(self):
+        super().clean()
+        if self.starts_at and self.expires_at and self.expires_at <= self.starts_at:
+            raise ValidationError({"expires_at": "Expiry must be after the start."})
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_currently_active(self) -> bool:
+        now = timezone.now()
+        return self.status == C.TEMP_ACCESS_ACTIVE and self.starts_at <= now < self.expires_at
+
+    @property
+    def effective_status(self) -> str:
+        if self.status == C.TEMP_ACCESS_REVOKED:
+            return "REVOKED"
+        if self.is_expired:
+            return "EXPIRED"
+        if timezone.now() < self.starts_at:
+            return "SCHEDULED"
+        return "ACTIVE"

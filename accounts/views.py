@@ -32,6 +32,7 @@ from .forms import (
     ReauthForm,
     SecretCodeForm,
 )
+from .devices import device_session_service
 from .services import (
     login_protection_service,
     security_code_service,
@@ -219,6 +220,11 @@ def portal_login(request, portal_key: str):
         login_protection_service.clear_failures(user)
         login(request, user, backend="accounts.backends.OfficerBackend")
         session_service.establish(request, user, portal_key)
+        # The session key only exists after it is saved; force it so the
+        # device/session registry can bind to the real key.
+        if not request.session.session_key:
+            request.session.save()
+        _device, _session_row, device_token = device_session_service.register_login(request, user, portal_key)
 
         audit_service.record_event(
             C.EVENT_LOGIN_SUCCESS,
@@ -236,7 +242,10 @@ def portal_login(request, portal_key: str):
             result=C.RESULT_ALLOW,
             request=request,
         )
-        return redirect(meta["dashboard_url"])
+        response = redirect(meta["dashboard_url"])
+        if device_token:
+            device_session_service.set_device_cookie(response, device_token)
+        return response
 
     return render(request, "accounts/login.html", {"form": form, "portal": meta, "portal_key": portal_key})
 
@@ -257,6 +266,7 @@ def portal_logout(request):
             result=C.RESULT_SUCCESS,
             request=request,
         )
+        device_session_service.close_current(request, C.SESSION_END_LOGOUT)
     logout(request)
     return redirect("portal_selection")
 

@@ -90,16 +90,149 @@ class AuthorizationService:
     # ------------------------------------------------------------------ #
     # RBAC permissions
     # ------------------------------------------------------------------ #
-    def get_user_permissions(self, user) -> set:
+    def get_role_permissions(self, user) -> set:
+        """Capabilities carried by the officer's role (plus umbrella
+        implications), ignoring temporary grants."""
         if not self._is_active_identity(user):
             return set()
         role = getattr(user, "role", None)
         if role is None:
             return set()
-        return set(role.permissions.values_list("codename", flat=True))
+        perms = set(role.permissions.values_list("codename", flat=True))
+        return self._expand_implications(perms)
+
+    def get_temporary_permissions(self, user) -> set:
+        """Currently-effective time-boxed *administrative* capabilities.
+
+        Only admin-domain codenames are honoured: a temporary grant can never
+        confer operational (case/document/...) authorization, even if such a
+        row were inserted directly into the database.
+        """
+        if not self._is_active_identity(user):
+            return set()
+        from django.utils import timezone
+
+        from .models import TemporaryCapability
+
+        now = timezone.now()
+        codenames = TemporaryCapability.objects.filter(
+            officer=user,
+            status=C.TEMP_ACCESS_ACTIVE,
+            starts_at__lte=now,
+            expires_at__gt=now,
+        ).values_list("permission__codename", flat=True)
+        return {c for c in codenames if C.is_admin_capability(c)}
+
+    def get_user_permissions(self, user) -> set:
+        if not self._is_active_identity(user):
+            return set()
+        return self.get_role_permissions(user) | self.get_temporary_permissions(user)
 
     def has_permission(self, user, permission: str) -> bool:
         return permission in self.get_user_permissions(user)
+
+    def explain_permission(self, user, permission: str) -> dict:
+        """Explain WHY an officer does / does not hold a capability.
+
+        Returns ``{"what", "granted", "why", "source", "status", "expires_at"}``.
+        Operational capabilities are deliberately *not* explained beyond
+        "managed separately" — this portal must not reason about case access.
+        """
+        result = {
+            "what": permission,
+            "granted": False,
+            "why": "Not granted.",
+            "source": None,
+            "status": "INACTIVE",
+            "expires_at": None,
+        }
+        if not C.is_admin_capability(permission):
+            result.update(
+                why="Operational authorization is managed separately.",
+                source="operational-domain",
+                status="N/A",
+            )
+            return result
+        if not self._is_active_identity(user):
+            result.update(why=f"Account is {getattr(user, 'account_status', 'inactive')}; no capability is active.", status="INACTIVE")
+            return result
+
+        role = getattr(user, "role", None)
+        if role is not None:
+            direct = set(role.permissions.values_list("codename", flat=True))
+            if permission in direct:
+                result.update(
+                    granted=True,
+                    why=f"Granted through the {role.name} role.",
+                    source=f"role:{role.name}",
+                    status="ACTIVE",
+                )
+                return result
+            for umbrella, implied in C.CAPABILITY_IMPLICATIONS.items():
+                if umbrella in direct and permission in implied:
+                    result.update(
+                        granted=True,
+                        why=f"Implied by {umbrella} carried by the {role.name} role.",
+                        source=f"role:{role.name}→{umbrella}",
+                        status="ACTIVE",
+                    )
+                    return result
+
+        from django.utils import timezone
+
+        from .models import TemporaryCapability
+
+        now = timezone.now()
+        grant = (
+            TemporaryCapability.objects.filter(
+                officer=user, permission__codename=permission, status=C.TEMP_ACCESS_ACTIVE,
+                starts_at__lte=now, expires_at__gt=now,
+            )
+            .select_related("granted_by")
+            .order_by("-expires_at")
+            .first()
+        )
+        if grant is not None:
+            granted_by = grant.granted_by.officer_id if grant.granted_by else "unknown"
+            result.update(
+                granted=True,
+                why=f"Temporary capability granted by {granted_by}: {grant.reason}",
+                source=f"temporary:{grant.pk}",
+                status="TEMPORARY",
+                expires_at=grant.expires_at,
+            )
+            return result
+
+        # Not granted — say whether an expired/revoked grant explains a recent loss.
+        latest = (
+            TemporaryCapability.objects.filter(officer=user, permission__codename=permission)
+            .order_by("-expires_at")
+            .first()
+        )
+        if latest is not None:
+            result.update(
+                why=f"Previous temporary grant is {latest.effective_status.lower()}.",
+                source=f"temporary:{latest.pk}",
+                status=latest.effective_status,
+                expires_at=latest.expires_at,
+            )
+        elif role is None:
+            result.update(why="No role assigned.")
+        else:
+            result.update(why=f"The {role.name} role does not carry this capability.", source=f"role:{role.name}")
+        return result
+
+    def explain_all(self, user) -> list:
+        """Explain every admin capability the officer currently holds."""
+        return [self.explain_permission(user, p) for p in sorted(self.get_user_permissions(user)) if C.is_admin_capability(p)]
+
+    @staticmethod
+    def _expand_implications(perms: set) -> set:
+        expanded = set(perms)
+        for umbrella, implied in C.CAPABILITY_IMPLICATIONS.items():
+            if umbrella in perms:
+                expanded |= implied
+        return expanded
 
     def can(self, user, permission: str) -> bool:
         return self.has_permission(user, permission)

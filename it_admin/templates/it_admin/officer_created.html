@@ -1,22 +1,14 @@
-{% extends "portal/base.html" %}
+{% extends "it_admin/base.html" %}
 {% block title %}Officer Provisioned{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
-
-{% block content %}
-<h2>Officer provisioned</h2>
+{% block admin_content %}
+<h2>Officer identity created</h2>
+<p class="muted small">Operational authorization is managed separately. The officer has <strong>no</strong> case or evidence access by virtue of this step.</p>
 
 <div class="panel">
   <div class="cap-grid">
     <div class="cap"><div class="cap__k">Officer ID</div><div class="cap__v mono">{{ officer.officer_id }}</div></div>
+    <div class="cap"><div class="cap__k">Name</div><div class="cap__v">{{ officer.full_name }}</div></div>
     <div class="cap"><div class="cap__k">Status</div><div class="cap__v"><span class="badge badge--invited">INVITED</span></div></div>
   </div>
 </div>
@@ -29,7 +21,7 @@
 <div class="panel">
   <div class="cap-grid">
     <div class="cap"><div class="cap__k">Provisional password</div><div class="cap__v mono">{{ initial_password }}</div></div>
-    <div class="cap"><div class="cap__k">Initial security code</div><div class="cap__v mono">{{ initial_secret_code }}</div></div>
+    <div class="cap"><div class="cap__k">Initial security code</div><div class="cap__v mono">{{ initial_secret_code|default:"— (officer sets during activation)" }}</div></div>
   </div>
 </div>
 
@@ -39,5 +31,8 @@
   <p><code class="mono small" style="word-break:break-all;">{{ activation_link }}</code></p>
 </div>
 
-<p><a class="btn btn--primary" href="{% url 'it_admin:officer_detail' officer.pk %}">View officer</a></p>
+<p>
+  <a class="btn btn--primary" href="{% url 'it_admin:officer_detail' officer.pk %}">View officer</a>
+  <a class="btn btn--ghost" href="{% url 'it_admin:officer_create' %}">Provision another</a>
+</p>
 {% endblock %}

@@ -13,6 +13,8 @@ from django.core.exceptions import ValidationError
 from . import constants as C
 from .models import (
     ClearanceLevel,
+    Department,
+    Designation,
     OrganizationUnit,
     Portal,
     Role,
@@ -181,14 +183,17 @@ class ReauthForm(forms.Form):
 # Provisioning forms (Central IT only)
 # ---------------------------------------------------------------------------
 class OfficerCreateForm(forms.ModelForm):
+    """Single-page provisioning form (kept for API/test compatibility; the
+    portal UI uses the stepped ``it_admin.forms`` wizard)."""
+
     class Meta:
         model = Officer
         fields = [
             "officer_id",
+            "employee_id",
             "email",
             "full_name",
-            "rank",
-            "department",
+            "designation",
             "phone",
             "role",
             "clearance",
@@ -200,6 +205,11 @@ class OfficerCreateForm(forms.ModelForm):
         required=False,
         help_text="Leave blank to auto-generate a unique Officer ID.",
     )
+    # Legacy compatibility: older callers post ``department`` / ``rank`` as
+    # free text. Values matching an active registry row are resolved to it;
+    # anything else is preserved verbatim as a descriptive label.
+    department = forms.CharField(required=False, help_text="Department code, name or ID.")
+    rank = forms.CharField(required=False, max_length=64)
     initial_password = forms.CharField(
         label="Initial password",
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
@@ -227,14 +237,45 @@ class OfficerCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["role"].queryset = Role.objects.all()
         self.fields["clearance"].queryset = ClearanceLevel.objects.all()
-        self.fields["unit"].queryset = OrganizationUnit.objects.select_related("organization")
+        self.fields["unit"].queryset = OrganizationUnit.objects.filter(is_active=True).select_related("organization")
+        self.fields["designation"].queryset = Designation.objects.filter(is_active=True)
 
     def clean_officer_id(self):
         value = self.cleaned_data["officer_id"].strip().upper()
         if not value:
             return ""
         if Officer.objects.filter(officer_id__iexact=value).exists():
-            raise ValidationError("This Officer ID is already in use.")
+            raise ValidationError("Officer ID already exists.")
+        return value
+
+    def clean_department(self):
+        value = (self.cleaned_data.get("department") or "").strip()
+        if not value:
+            return None
+        from django.db.models import Q
+
+        lookup = Q(code__iexact=value) | Q(name__iexact=value)
+        if value.isdigit():
+            lookup |= Q(pk=int(value))
+        match = Department.objects.filter(lookup).first()
+        if match is None:
+            return value  # legacy free-text label
+        if not match.is_active:
+            raise ValidationError("Selected department is not available.")
+        return match
+
+    def clean(self):
+        cleaned = super().clean()
+        rank = (cleaned.get("rank") or "").strip()
+        if rank and not cleaned.get("designation"):
+            cleaned["designation"] = Designation.objects.filter(name__iexact=rank, is_active=True).first()
+        cleaned["rank"] = rank
+        return cleaned
+
+    def clean_employee_id(self):
+        value = (self.cleaned_data.get("employee_id") or "").strip().upper()
+        if value and Officer.objects.filter(employee_id__iexact=value).exists():
+            raise ValidationError("Employee ID already exists.")
         return value
 
     def clean_email(self):
@@ -254,7 +295,7 @@ class OfficerEditForm(forms.ModelForm):
 
     class Meta:
         model = Officer
-        fields = ["full_name", "email", "phone", "rank", "department", "role", "clearance", "unit"]
+        fields = ["full_name", "email", "phone", "designation", "department", "role", "clearance", "unit"]
 
     portals = forms.ModelMultipleChoiceField(
         queryset=Portal.objects.all(),
