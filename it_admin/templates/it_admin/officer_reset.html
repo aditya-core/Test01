@@ -1,17 +1,8 @@
-{% extends "portal/base.html" %}
+{% extends "it_admin/base.html" %}
 {% block title %}Reset Credentials{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
-
-{% block content %}
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / <a href="{% url 'it_admin:officer_detail' officer.pk %}">{{ officer.officer_id }}</a></p>
 <h2>{% if mode == "password" %}Reset password{% else %}Reset security code{% endif %}</h2>
 <p class="muted small">Resetting for <span class="mono">{{ officer.officer_id }}</span> — {{ officer.full_name }}.
 This invalidates the officer's active sessions and is fully audited.</p>
@@ -27,6 +18,7 @@ This invalidates the officer's active sessions and is fully audited.</p>
       {% if mode == "password" %}<div class="help">At least 8 characters.</div>{% else %}<div class="help">6–32 characters.</div>{% endif %}
     </div>
     <button type="submit" class="btn btn--gold">Reset</button>
+    <a class="btn btn--ghost" href="{% url 'it_admin:officer_detail' officer.pk %}">Cancel</a>
   </form>
 </div>
 {% endblock %}

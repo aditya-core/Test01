@@ -1,0 +1,38 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Transfers & Postings{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Transfers / postings</h2>
+    <p class="muted small">Every posting change is appended here with effective date, reason and the recording administrator. To transfer an officer, open their profile.</p>
+  </div>
+</div>
+
+<form method="get" class="filter-bar">
+  <div class="filter-bar__grow"><input type="text" name="q" value="{{ q }}" placeholder="Officer ID or name"></div>
+  <button class="btn btn--primary btn--sm" type="submit">Search</button>
+  {% if q %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:posting_list' %}">Clear</a>{% endif %}
+</form>
+
+<table class="table">
+  <thead><tr><th>Effective</th><th>Officer</th><th>Kind</th><th>From</th><th>To</th><th>Reason</th><th>Recorded by</th><th>Review</th></tr></thead>
+  <tbody>
+    {% for p in page.object_list %}
+    <tr>
+      <td class="small nowrap">{{ p.effective_date|date:"Y-m-d" }}</td>
+      <td><a href="{% url 'it_admin:officer_detail' p.officer.pk %}">{{ p.officer.officer_id }}</a><div class="small muted">{{ p.officer.full_name }}</div></td>
+      <td class="small">{{ p.get_kind_display }}</td>
+      <td class="small">{{ p.from_department.name|default:"—" }} / {{ p.from_unit.name|default:"—" }} / {{ p.from_designation.name|default:"—" }}</td>
+      <td class="small">{{ p.to_department.name|default:"—" }} / {{ p.to_unit.name|default:"—" }} / {{ p.to_designation.name|default:"—" }}</td>
+      <td class="small">{{ p.reason|default:"—" }}</td>
+      <td class="mono small">{{ p.recorded_by.officer_id|default:"system" }}<div class="muted">{{ p.recorded_at|date:"Y-m-d H:i" }}</div></td>
+      <td>{% if p.authorization_review_required %}<span class="badge badge--warning">required</span>{% else %}<span class="muted small">—</span>{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="muted">No posting history recorded.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "it_admin/_partials/pagination.html" %}
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Devices & Sessions{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Devices &amp; sessions</h2>
+    <p class="muted small">Registered devices are identified by a random device cookie issued at sign-in (no fingerprinting). Session rows mirror live server sessions; terminating one signs that browser out immediately.</p>
+  </div>
+</div>
+
+<form method="get" class="filter-bar">
+  <div class="filter-bar__grow"><input type="text" name="q" value="{{ q }}" placeholder="Officer ID or name"></div>
+  <button class="btn btn--primary btn--sm" type="submit">Search</button>
+  {% if q %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:device_session_overview' %}">Clear</a>{% endif %}
+</form>
+
+{% url 'it_admin:device_session_overview' as next_url %}
+{% if can_view_sessions %}
+<div class="panel">
+  <h3>Active sessions ({{ sessions.paginator.count }})</h3>
+  {% include "it_admin/_partials/session_table.html" with sessions=sessions.object_list show_officer=True %}
+  {% include "it_admin/_partials/pagination.html" with page=sessions param="spage" querystring=querystring %}
+</div>
+{% endif %}
+{% if can_view_devices %}
+<div class="panel">
+  <h3>Active devices ({{ devices.paginator.count }})</h3>
+  {% include "it_admin/_partials/device_table.html" with devices=devices.object_list show_officer=True %}
+  {% include "it_admin/_partials/pagination.html" with page=devices param="dpage" querystring=querystring %}
+</div>
+{% endif %}
+{% endblock %}

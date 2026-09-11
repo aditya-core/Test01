@@ -1,0 +1,71 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Bulk Import — {% if result %}Result{% else %}Preview{% endif %}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:bulk_import' %}">Bulk import</a> / {% if result %}Result{% else %}Preview{% endif %}</p>
+<h2>{% if result %}Import result{% else %}Preview &amp; confirm{% endif %}</h2>
+
+{% if result %}
+<div class="stat-grid">
+  <div class="stat"><div class="stat__value">{{ result.created_count }}</div><div class="stat__label">Created</div></div>
+  <div class="stat {% if result.failed_count %}stat--danger{% endif %}"><div class="stat__value">{{ result.failed_count }}</div><div class="stat__label">Not processed</div></div>
+  <div class="stat"><div class="stat__value mono" style="font-size:16px;">{{ result.batch_ref }}</div><div class="stat__label">Batch reference</div></div>
+</div>
+{% if result.created %}
+<div class="panel">
+  <h3>Created identities</h3>
+  <table class="table table--compact"><thead><tr><th>Line</th><th>Officer ID</th><th>Name</th><th>Email</th><th></th></tr></thead>
+    <tbody>{% for row, officer in result.created %}<tr><td class="small">{{ row.line }}</td><td class="mono">{{ officer.officer_id }}</td><td>{{ officer.full_name }}</td><td class="small">{{ officer.email }}</td><td><a class="small" href="{% url 'it_admin:officer_detail' officer.pk %}">open</a></td></tr>{% endfor %}</tbody></table>
+</div>
+{% endif %}
+{% if result.failed or result.skipped %}
+<div class="panel">
+  <h3>Rows not processed</h3>
+  <table class="table table--compact"><thead><tr><th>Line</th><th>Email</th><th>Errors</th></tr></thead>
+    <tbody>{% for row in result.skipped %}<tr><td class="small">{{ row.line }}</td><td class="small">{{ row.data.email }}</td><td class="small text-danger">{{ row.errors|join:" · " }}</td></tr>{% endfor %}
+    {% for row in result.failed %}<tr><td class="small">{{ row.line }}</td><td class="small">{{ row.data.email }}</td><td class="small text-danger">{{ row.errors|join:" · " }}</td></tr>{% endfor %}</tbody></table>
+</div>
+{% endif %}
+<p><a class="btn btn--primary" href="{% url 'it_admin:officer_list' %}">Officer management</a> <a class="btn btn--ghost" href="{% url 'it_admin:bulk_import' %}">New import</a></p>
+
+{% else %}
+<div class="stat-grid">
+  <div class="stat"><div class="stat__value">{{ report.total }}</div><div class="stat__label">Rows</div></div>
+  <div class="stat"><div class="stat__value">{{ report.valid|length }}</div><div class="stat__label">Valid</div></div>
+  <div class="stat {% if report.invalid %}stat--danger{% endif %}"><div class="stat__value">{{ report.invalid|length }}</div><div class="stat__label">With errors</div></div>
+  <div class="stat"><div class="stat__value">{{ report.warning_count }}</div><div class="stat__label">Warnings</div></div>
+</div>
+
+<div class="panel">
+  <table class="table table--compact">
+    <thead><tr><th>Line</th><th>Name</th><th>Email</th><th>Officer ID</th><th>Designation</th><th>Department</th><th>Unit</th><th>Role</th><th>Validation</th></tr></thead>
+    <tbody>
+    {% for row in report.rows %}
+      <tr class="{% if not row.ok %}row--danger{% endif %}">
+        <td class="small">{{ row.line }}</td>
+        <td class="small">{{ row.data.full_name }}</td>
+        <td class="small">{{ row.data.email }}</td>
+        <td class="mono small">{{ row.data.officer_id|default:"auto" }}</td>
+        <td class="small">{{ row.data.designation|default:"—" }}</td>
+        <td class="small">{{ row.data.department|default:"—" }}</td>
+        <td class="small">{{ row.data.unit|default:"—" }}</td>
+        <td class="small">{{ row.data.role|default:"—" }}</td>
+        <td class="small">
+          {% for e in row.errors %}<div class="text-danger">✖ {{ e }}</div>{% endfor %}
+          {% for w in row.warnings %}<div class="muted">⚠ {{ w }}</div>{% endfor %}
+          {% if row.ok and not row.warnings %}<span class="badge badge--success">ok</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h3>Confirm</h3>
+  <p class="small">{{ report.valid|length }} valid row{{ report.valid|length|pluralize }} will be created as INVITED identities{% if report.invalid %}; {{ report.invalid|length }} row{{ report.invalid|length|pluralize }} with errors will be skipped and listed in the result{% endif %}. Reason recorded: <em>{{ reason|default:"Bulk import" }}</em>.</p>
+  <form method="post" action="{% url 'it_admin:bulk_commit' %}" class="inline">{% csrf_token %}<input type="hidden" name="confirm" value="1"><button class="btn btn--primary" type="submit" {% if not report.valid %}disabled{% endif %}>Process import</button></form>
+  <form method="post" action="{% url 'it_admin:bulk_commit' %}" class="inline">{% csrf_token %}<input type="hidden" name="action" value="discard"><button class="btn btn--ghost" type="submit">Discard</button></form>
+</div>
+{% endif %}
+{% endblock %}

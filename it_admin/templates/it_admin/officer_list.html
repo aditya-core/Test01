@@ -1,52 +1,63 @@
-{% extends "portal/base.html" %}
+{% extends "it_admin/base.html" %}
 {% block title %}Officer Management{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}" class="active">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Officer management</h2>
+    <p class="muted small">{{ total }} officer{{ total|pluralize }}{% if filtered %} matching the current filter{% endif %}.</p>
+  </div>
+  <div class="page-head__actions">
+    {% if "officer.create" in admin_perms %}<a class="btn btn--primary btn--sm" href="{% url 'it_admin:officer_create' %}">Provision officer</a>{% endif %}
+    {% if "officer.bulk_import" in admin_perms %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:bulk_import' %}">Bulk import</a>{% endif %}
+  </div>
+</div>
 
-{% block content %}
-<h2>Officer management</h2>
-
-<form method="get" style="margin-bottom:16px; display:flex; gap:8px; max-width:420px;">
-  <input type="text" name="q" value="{{ q }}" placeholder="Search by Officer ID or name" style="flex:1; padding:9px 12px; border:1px solid #cdd5df; border-radius:6px;">
-  <button class="btn btn--primary btn--sm" type="submit">Search</button>
+<form method="get" class="filter-bar">
+  <div class="filter-bar__grow">{{ form.q }}</div>
+  {{ form.status }}
+  {{ form.department }}
+  {{ form.unit }}
+  {{ form.designation }}
+  {{ form.mfa }}
+  <button class="btn btn--primary btn--sm" type="submit">Apply</button>
+  {% if filtered %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_list' %}">Clear</a>{% endif %}
 </form>
 
 <table class="table">
   <thead>
     <tr>
-      <th>Officer ID</th><th>Name</th><th>Role</th><th>Clearance</th><th>Unit</th><th>Status</th><th></th>
+      <th>Officer</th><th>Officer ID</th><th>Designation</th><th>Department</th><th>Unit</th>
+      <th>Status</th><th>MFA</th><th>Last login</th><th>Actions</th>
     </tr>
   </thead>
   <tbody>
     {% for officer in page.object_list %}
     <tr>
-      <td class="mono">{{ officer.officer_id }}</td>
-      <td>{{ officer.full_name }}</td>
-      <td>{{ officer.role.name|default:"—" }}</td>
-      <td>{{ officer.clearance.code|default:"—" }}</td>
+      <td>
+        <a href="{% url 'it_admin:officer_detail' officer.pk %}"><strong>{{ officer.full_name }}</strong></a>
+        <div class="small muted">{{ officer.email }}</div>
+      </td>
+      <td class="mono">{{ officer.officer_id }}{% if officer.employee_id %}<div class="small muted">Emp {{ officer.employee_id }}</div>{% endif %}</td>
+      <td>{{ officer.designation.name|default:officer.rank|default:"—" }}</td>
+      <td>{{ officer.department.name|default:officer.legacy_department|default:"—" }}</td>
       <td>{{ officer.unit.name|default:"—" }}</td>
-      <td><span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span></td>
-      <td><a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_detail' officer.pk %}">Manage</a></td>
+      <td>
+        <span class="badge badge--{{ officer.account_status|lower }}">{{ officer.account_status }}</span>
+        {% if officer.is_locked_out %}<span class="badge badge--locked" title="Temporary lockout">lockout</span>{% endif %}
+      </td>
+      <td>{% if officer.secret_code_configured %}<span class="badge badge--success">on</span>{% else %}<span class="badge badge--warning">missing</span>{% endif %}</td>
+      <td class="small">{{ officer.last_login|date:"Y-m-d H:i"|default:"—" }}</td>
+      <td class="nowrap">
+        <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_detail' officer.pk %}">View</a>
+        {% if "officer.update" in admin_perms %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_edit' officer.pk %}">Edit</a>{% endif %}
+      </td>
     </tr>
     {% empty %}
-    <tr><td colspan="7" class="muted">No officers found.</td></tr>
+    <tr><td colspan="9" class="muted">No officers found.</td></tr>
     {% endfor %}
   </tbody>
 </table>
 
-{% if page.paginator.num_pages > 1 %}
-<div class="small muted" style="margin-top:10px;">
-  Page {{ page.number }} of {{ page.paginator.num_pages }}
-  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}">← Prev</a>{% endif %}
-  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}">Next →</a>{% endif %}
-</div>
-{% endif %}
+{% include "it_admin/_partials/pagination.html" %}
 {% endblock %}

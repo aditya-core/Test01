@@ -1,0 +1,21 @@
+{% extends "portal/base.html" %}
+{% block portal_label %}IT Department — System Administration{% endblock %}
+{% block portal_name %}IT / Admin Portal{% endblock %}
+
+{# Sidebar is built server-side from the officer's real capability set
+   (it_admin.navigation). Items are only decoration: every view re-checks. #}
+{% block nav %}
+  {% for section in admin_nav %}
+    <div class="nav-section">{{ section.title }}</div>
+    {% for item in section.items %}
+      <a href="{{ item.url }}" class="{% if item.active %}active{% endif %}">
+        {{ item.name }}
+        {% if item.name == "Approval Center" and pending_approval_count %}<span class="nav-count">{{ pending_approval_count }}</span>{% endif %}
+      </a>
+    {% endfor %}
+  {% endfor %}
+{% endblock %}
+
+{% block content %}
+  {% block admin_content %}{% endblock %}
+{% endblock %}

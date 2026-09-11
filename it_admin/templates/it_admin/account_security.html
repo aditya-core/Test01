@@ -1,0 +1,33 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Account Security{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Account security</h2>
+    <p class="muted small">Suspend, reactivate, emergency-lock or deactivate accounts. Every action requires a reason and is recorded with previous and new state. History is never deleted.</p>
+  </div>
+</div>
+
+<form method="get" class="filter-bar">
+  <div class="filter-bar__grow"><input type="text" name="q" value="{{ q }}" placeholder="Find an officer by ID or name"></div>
+  <button class="btn btn--primary btn--sm" type="submit">Search</button>
+</form>
+
+{% if results is not None %}
+<div class="panel">
+  <h3>Search results</h3>
+  {% include "it_admin/_partials/lifecycle_table.html" with rows=results %}
+</div>
+{% endif %}
+
+<div class="panel">
+  <h3>Suspended, locked or deactivated accounts ({{ blocked|length }})</h3>
+  {% include "it_admin/_partials/lifecycle_table.html" with rows=blocked %}
+</div>
+
+<div class="panel">
+  <h3>Temporary lockouts (failed sign-in attempts)</h3>
+  {% include "it_admin/_partials/lifecycle_table.html" with rows=locked_out %}
+</div>
+{% endblock %}

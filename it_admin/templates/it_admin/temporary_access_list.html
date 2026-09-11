@@ -1,0 +1,36 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Temporary Access{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Temporary administrative access</h2>
+    <p class="muted small">Time-boxed grants of administrative capabilities. Expired grants become inactive automatically; nothing here can grant operational (case/evidence) access.</p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost btn--sm" href="?all={% if show_all %}0{% else %}1{% endif %}">{% if show_all %}Active only{% else %}Show all{% endif %}</a>
+    {% if can_grant %}<a class="btn btn--primary btn--sm" href="{% url 'it_admin:temporary_access_create' %}">Grant temporary capability</a>{% endif %}
+  </div>
+</div>
+
+<table class="table">
+  <thead><tr><th>Officer</th><th>Capability</th><th>Reason</th><th>Granted by</th><th>Start</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for g in page.object_list %}
+    <tr>
+      <td><a href="{% url 'it_admin:officer_detail' g.officer.pk %}" class="mono">{{ g.officer.officer_id }}</a><div class="small muted">{{ g.officer.full_name }}</div></td>
+      <td class="mono small">{{ g.permission.codename }}</td>
+      <td class="small">{{ g.reason }}{% if g.revoke_reason %}<div class="muted">Revoked: {{ g.revoke_reason }}</div>{% endif %}</td>
+      <td class="mono small">{{ g.granted_by.officer_id|default:"—" }}</td>
+      <td class="small">{{ g.starts_at|date:"Y-m-d H:i" }}</td>
+      <td class="small">{{ g.expires_at|date:"Y-m-d H:i" }}</td>
+      <td><span class="badge badge--{% if g.effective_status == 'ACTIVE' %}success{% elif g.effective_status == 'SCHEDULED' %}warning{% else %}info{% endif %}">{{ g.effective_status }}</span></td>
+      <td>{% if can_grant and g.status == "ACTIVE" and not g.is_expired %}{% url 'it_admin:temporary_access_revoke' g.pk as revoke_url %}{% include "it_admin/_partials/reason_action.html" with action_url=revoke_url label="Revoke" tone="danger" %}{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="muted">No temporary grants.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "it_admin/_partials/pagination.html" with querystring=show_all|yesno:"all=1," %}
+{% endblock %}

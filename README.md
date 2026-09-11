@@ -39,19 +39,51 @@ Open `http://localhost:8000/`.
 | General (field officer) | `OFF-101` | `ChangeMe!123` | `CODE-101` |
 | General (inspector) | `OFF-102` | `ChangeMe!123` | `CODE-102` |
 | Classified | `OFF-201` | `ChangeMe!123` | `CODE-201` |
-| IT / Admin | `OFF-301` | `ChangeMe!123` | `CODE-301` |
-| Security admin (audit) | `OFF-302` | `ChangeMe!123` | `CODE-302` |
+| IT / Admin (SYSTEM ADMIN bundle) | `OFF-301` | `ChangeMe!123` | `CODE-301` |
+| Security admin (security ops, reviews, approvals, audit) | `OFF-302` | `ChangeMe!123` | `CODE-302` |
 | Dev superuser | `SU-900` | `ChangeMe!123` | `CODE-900` |
+
+`seed_demo` also creates the data-driven IT administration roles
+(`IT_ADMIN`, `IDENTITY_ADMIN`, `SECURITY_ADMIN`, `AUDITOR`), the designation and
+department registries, and back-fills existing officers into them. Four-eyes
+approvals need **two different administrators** holding `approval.review`
+(e.g. `OFF-301` requests, `OFF-302` approves).
 
 Seeded accounts are provisioned by Central IT and arrive in the workflow:
 newly created officers are `INVITED` and activate through the
 **activation link** shown in the provisioning result page. (Demo accounts are
 pre-activated for convenience.)
 
+## IT / Admin portal
+
+`/admin-portal/` is the identity & administration module (see
+[`docs/08-url-structure.md`](docs/08-url-structure.md) for every route):
+
+- **Identity** — officer directory, multi-step provisioning wizard, designation
+  & rank registry, departments → units, transfers & postings (history is
+  append-only), CSV bulk import (validate → preview → confirm).
+- **Security** — account lifecycle (suspend / reactivate / emergency lock /
+  deactivate with confirmation + reason), device & session registry with
+  revoke / terminate, time-bound admin capability grants, periodic access
+  reviews, tamper-evident append-only audit log with hash-chain verification.
+- **Administration** — IT admin roles & capabilities, four-eyes approval center
+  for privileged changes (requesters cannot approve their own requests).
+- **Access explainability** — every officer profile has a “WHY?” page that
+  explains each administrative capability (WHAT / WHY / SOURCE / STATUS).
+
+IT administration never grants operational (case / evidence) authorization:
+*“Operational authorization is managed separately.”*
+
+Upgrading an existing installation only needs `python manage.py migrate`
+(migrations convert existing `rank` / `department` text into the new
+registries and back-fill the audit hash chain) followed by an optional
+`python manage.py seed_demo` to create the admin role bundles.
+
 ## Tests
 
 ```bash
-python manage.py test
+python manage.py test              # full suite (accounts, audit, it_admin)
+python manage.py test it_admin     # IT / Admin portal feature tests
 ```
 
 Covers: valid login, invalid password / Officer ID / secret code, locked /
@@ -80,7 +112,9 @@ accounts/     central identity authority (custom User, RBAC, clearance, org,
               authorization service, login, activation, re-auth)
 audit/        accountability engine (AuditEvent, SecurityEvent, viewer)
 classified/   classified portal shell
-it_admin/     IT / admin portal shell (provisioning, security, audit)
+it_admin/     IT / admin portal (directory, provisioning, registries, transfers,
+              lifecycle, devices & sessions, audit, access reviews, temporary
+              access, admin roles, four-eyes approvals, bulk import)
 general/      general officer portal shell
 portal/       shared authenticated shell (base template, nav)
 docs/         design documents

@@ -1,0 +1,56 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Approval #{{ req.pk }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:approval_list' %}">Approval center</a> / #{{ req.pk }}</p>
+<h2>{{ req.get_action_display }} <span class="badge badge--{% if req.status == 'APPROVED' %}success{% elif req.status == 'REJECTED' or req.status == 'FAILED' %}deny{% elif req.status == 'PENDING' %}warning{% else %}info{% endif %}">{{ req.status }}</span></h2>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Request</h3>
+    <dl class="kv">
+      <dt>Target</dt><dd>{{ req.target_label|default:req.target_id }} <span class="small muted">({{ req.target_type }} {{ req.target_id }})</span></dd>
+      <dt>Summary</dt><dd>{{ req.summary }}</dd>
+      <dt>Reason</dt><dd>{{ req.reason }}</dd>
+      <dt>Requested by</dt><dd class="mono">{{ req.requested_by.officer_id }} <span class="small muted">{{ req.requested_at|date:"Y-m-d H:i" }}</span></dd>
+      {% if payload_items %}<dt>Parameters</dt><dd>{% for k, v in payload_items %}<div class="small"><span class="mono">{{ k }}</span> = {{ v }}</div>{% endfor %}</dd>{% endif %}
+    </dl>
+    {% if req.status != "PENDING" %}
+    <h4>Decision</h4>
+    <dl class="kv">
+      <dt>Decided by</dt><dd class="mono">{{ req.decided_by.officer_id|default:"—" }} <span class="small muted">{{ req.decided_at|date:"Y-m-d H:i" }}</span></dd>
+      <dt>Decision reason</dt><dd>{{ req.decision_reason|default:"—" }}</dd>
+      <dt>Result</dt><dd>{{ req.result|default:"—" }}</dd>
+    </dl>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    {% if req.status == "PENDING" %}
+      {% if is_requester %}
+        <h3>Your request</h3>
+        <p class="notice small">You cannot approve your own request. A second administrator must decide.</p>
+        <form method="post" action="{% url 'it_admin:approval_cancel' req.pk %}">{% csrf_token %}<button class="btn btn--ghost" type="submit">Withdraw request</button></form>
+      {% elif can_review %}
+        <h3>Decision</h3>
+        <form method="post" action="{% url 'it_admin:approval_decide' req.pk %}">
+          {% csrf_token %}
+          <div class="field">
+            <label>Decision</label>
+            <div class="radio-list">
+              <label><input type="radio" name="decision" value="approve" required> <strong>Approve</strong> — execute the change now</label>
+              <label><input type="radio" name="decision" value="reject"> <strong>Reject</strong></label>
+            </div>
+          </div>
+          <div class="field"><label>Reason</label><textarea name="decision_reason" rows="2" required minlength="5" placeholder="Recorded in the audit trail"></textarea></div>
+          <button type="submit" class="btn btn--primary">Record decision</button>
+        </form>
+      {% else %}
+        <p class="muted small">Awaiting a reviewer.</p>
+      {% endif %}
+    {% else %}
+      <h3>Closed</h3><p class="muted small">This request has been decided and cannot be changed.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "it_admin/base.html" %}
+{% load it_admin_extras %}
+{% block title %}Departments & Units{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Departments &amp; units</h2>
+    <p class="muted small">Department → Unit → Officer. Units are the organizational scope used for postings; departments group units administratively.</p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost btn--sm" href="?inactive={% if show_inactive %}0{% else %}1{% endif %}">{% if show_inactive %}Hide inactive{% else %}Show inactive{% endif %}</a>
+    {% if can_manage %}
+      <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:unit_create' %}">New unit</a>
+      <a class="btn btn--primary btn--sm" href="{% url 'it_admin:department_create' %}">New department</a>
+    {% endif %}
+  </div>
+</div>
+
+{% for dept in departments %}
+<div class="panel">
+  <div class="panel__head">
+    <div>
+      <h3><span class="mono muted">{{ dept.code }}</span> {{ dept.name }}
+        {% if not dept.is_active %}<span class="badge badge--disabled">INACTIVE</span>{% endif %}</h3>
+      <p class="small muted">{{ dept.description|default:"" }} {{ dept.officer_total }} officer{{ dept.officer_total|pluralize }} assigned directly.</p>
+    </div>
+    <div class="actions">
+      <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:officer_list' %}?department={{ dept.pk }}">Officers</a>
+      {% if can_manage %}
+        <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:department_edit' dept.pk %}">Edit</a>
+        <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:unit_create' %}?department={{ dept.pk }}">Add unit</a>
+        <form method="post" action="{% url 'it_admin:department_toggle' dept.pk %}" class="inline">{% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">{% if dept.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>
+      {% endif %}
+    </div>
+  </div>
+  {% with units=dept_units|get_item:dept.pk %}
+  {% if units %}
+  <table class="table table--compact">
+    <thead><tr><th>Unit</th><th>Kind</th><th>Organization</th><th>Officers</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for u in units %}
+      <tr>
+        <td>{{ u.name }}</td><td class="small">{{ u.get_kind_display }}</td><td class="small">{{ u.organization.name }}</td>
+        <td><a href="{% url 'it_admin:officer_list' %}?unit={{ u.pk }}">{{ u.officer_total }}</a></td>
+        <td>{% if u.is_active %}<span class="badge badge--active">ACTIVE</span>{% else %}<span class="badge badge--disabled">INACTIVE</span>{% endif %}</td>
+        <td class="nowrap">{% if can_manage %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:unit_edit' u.pk %}">Edit</a>
+          <form method="post" action="{% url 'it_admin:unit_toggle' u.pk %}" class="inline">{% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">{% if u.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="small muted">No units assigned to this department.</p>{% endif %}
+  {% endwith %}
+</div>
+{% empty %}
+<div class="panel"><p class="muted">No departments defined yet.</p></div>
+{% endfor %}
+
+{% if unassigned_units %}
+<div class="panel">
+  <h3>Units not yet assigned to a department</h3>
+  <table class="table table--compact">
+    <thead><tr><th>Unit</th><th>Kind</th><th>Organization</th><th>Officers</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for u in unassigned_units %}
+      <tr>
+        <td>{{ u.name }}</td><td class="small">{{ u.get_kind_display }}</td><td class="small">{{ u.organization.name }}</td>
+        <td><a href="{% url 'it_admin:officer_list' %}?unit={{ u.pk }}">{{ u.officer_total }}</a></td>
+        <td>{% if u.is_active %}<span class="badge badge--active">ACTIVE</span>{% else %}<span class="badge badge--disabled">INACTIVE</span>{% endif %}</td>
+        <td class="nowrap">{% if can_manage %}<a class="btn btn--ghost btn--sm" href="{% url 'it_admin:unit_edit' u.pk %}">Assign / edit</a>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

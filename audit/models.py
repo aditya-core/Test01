@@ -58,6 +58,17 @@ class AuditEvent(models.Model):
 
     context = models.JSONField(default=dict, blank=True)
 
+    # Structured before/after snapshot for administrative changes. Kept
+    # separate from ``context`` so the timeline can render it consistently.
+    previous_state = models.JSONField(default=dict, blank=True)
+    new_state = models.JSONField(default=dict, blank=True)
+
+    # Tamper-evident chain (see ``audit.hashing``). ``sequence`` is a strict
+    # monotonic position assigned under a row lock on ``AuditChainHead``.
+    sequence = models.PositiveBigIntegerField(null=True, blank=True, unique=True, editable=False)
+    previous_hash = models.CharField(max_length=80, blank=True, default="", editable=False)
+    current_hash = models.CharField(max_length=80, blank=True, default="", editable=False, db_index=True)
+
     class Meta:
         ordering = ["-occurred_at"]
         indexes = [
@@ -67,6 +78,49 @@ class AuditEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.event_id} {self.event_type} {self.officer_id_snapshot or '-'}"
+
+    # -- Append-only guard -------------------------------------------------
+    # The ORM still allows ``.update()`` / raw SQL, which is exactly what the
+    # hash chain is there to detect. These guards stop the *normal* code paths
+    # (admin, shell, accidental ``save()``) from mutating history.
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not kwargs.pop("_chain_write", False):
+            raise AuditImmutableError("Audit events are append-only and cannot be modified.")
+        kwargs.pop("_chain_write", None)
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise AuditImmutableError("Audit events are append-only and cannot be deleted.")
+
+    @property
+    def target_label(self) -> str:
+        if self.resource_type and self.resource_id:
+            return f"{self.resource_type} {self.resource_id}"
+        return self.officer_id_snapshot or self.resource_type or ""
+
+
+class AuditImmutableError(Exception):
+    """Raised when application code attempts to modify or delete audit rows."""
+
+
+class AuditChainHead(models.Model):
+    """Single-row table holding the tail of the hash chain.
+
+    Writers ``select_for_update`` this row so sequence numbers are assigned
+    serially and two concurrent events cannot both claim the same
+    ``previous_hash`` (which would fork the chain).
+    """
+
+    singleton = models.BooleanField(default=True, unique=True, editable=False)
+    last_sequence = models.PositiveBigIntegerField(default=0)
+    last_hash = models.CharField(max_length=80, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "audit chain head"
+
+    def __str__(self) -> str:
+        return f"chain@{self.last_sequence}"
 
 
 class SecurityEvent(models.Model):

@@ -1,0 +1,20 @@
+{% if devices %}
+<table class="table">
+  <thead><tr>{% if show_officer %}<th>Officer</th>{% endif %}<th>Device</th><th>Browser</th><th>OS</th><th>First seen</th><th>Last seen</th><th>Last IP</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for d in devices %}
+    <tr>
+      {% if show_officer %}<td><a href="{% url 'it_admin:officer_devices_sessions' d.officer.pk %}" class="mono">{{ d.officer.officer_id }}</a></td>{% endif %}
+      <td class="small">{{ d.label|default:"—" }}</td>
+      <td class="small">{{ d.browser|default:"Unknown" }}</td>
+      <td class="small">{{ d.operating_system|default:"Unknown" }}</td>
+      <td class="small">{{ d.first_seen|date:"Y-m-d H:i" }}</td>
+      <td class="small">{{ d.last_seen|date:"Y-m-d H:i" }}</td>
+      <td class="mono small">{{ d.last_ip|default:"—" }}</td>
+      <td><span class="badge badge--{{ d.status|lower }}">{{ d.status }}</span>{% if d.revoked_at %}<div class="small muted">{{ d.revoked_at|date:"Y-m-d" }} by {{ d.revoked_by.officer_id|default:"system" }}</div>{% endif %}</td>
+      <td>{% if can_revoke and d.is_active %}{% url 'it_admin:device_revoke' d.pk as revoke_url %}{% include "it_admin/_partials/reason_action.html" with action_url=revoke_url label="Revoke" tone="danger" next=next_url confirm_text="Ends every session from this device; it must re-register at next sign-in." %}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted small">No registered devices.</p>{% endif %}

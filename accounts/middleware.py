@@ -20,6 +20,7 @@ from django.utils import timezone
 from audit.services import audit_service
 
 from . import constants as C
+from .devices import device_session_service
 
 
 class SessionSecurityMiddleware:
@@ -41,6 +42,7 @@ class SessionSecurityMiddleware:
                     reason=f"Account state {getattr(user, 'account_status', 'unknown')}",
                     request=request,
                 )
+                device_session_service.close_current(request, C.SESSION_END_ACCOUNT_STATE)
                 logout(request)
                 request.session.flush()
                 return HttpResponseRedirect(reverse("portal_selection"))
@@ -59,6 +61,7 @@ class SessionSecurityMiddleware:
                             reason="Session maximum age exceeded",
                             request=request,
                         )
+                        device_session_service.close_current(request, C.SESSION_END_EXPIRED)
                         logout(request)
                         request.session.flush()
                         return HttpResponseRedirect(reverse("portal_selection"))
@@ -79,6 +82,7 @@ class SessionSecurityMiddleware:
                             reason="Session inactivity timeout",
                             request=request,
                         )
+                        device_session_service.close_current(request, C.SESSION_END_EXPIRED)
                         logout(request)
                         request.session.flush()
                         return HttpResponseRedirect(reverse("portal_selection"))
@@ -87,5 +91,6 @@ class SessionSecurityMiddleware:
 
             # Track last activity for the next request.
             request.session["last_activity"] = now.isoformat()
+            device_session_service.touch(request)
 
         return self.get_response(request)

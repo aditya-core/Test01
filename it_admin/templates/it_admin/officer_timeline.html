@@ -1,0 +1,25 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Timeline — {{ officer.officer_id }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / <a href="{% url 'it_admin:officer_detail' officer.pk %}">{{ officer.officer_id }}</a> / Timeline</p>
+<h2>360° timeline — {{ officer.full_name }}</h2>
+<p class="muted small">Chronological administrative and security history built from the audit trail, posting history, approvals and access reviews. Investigation activity is out of scope for this portal.</p>
+
+<table class="table">
+  <thead><tr><th>Time</th><th>Actor</th><th>Event</th><th>Detail</th><th>Result</th></tr></thead>
+  <tbody>
+    {% for e in events %}
+    <tr class="row--{{ e.tone }}">
+      <td class="mono small nowrap">{{ e.time|date:"Y-m-d H:i:s" }}</td>
+      <td class="mono small">{{ e.actor }}</td>
+      <td class="small"><strong>{{ e.event }}</strong>{% if e.source != "audit" %} <span class="badge badge--info">{{ e.source }}</span>{% endif %}</td>
+      <td class="small">{{ e.detail|default:"—" }}</td>
+      <td><span class="badge badge--{% if e.result == 'SUCCESS' or e.result == 'ALLOW' or e.result == 'COMPLETED' %}success{% elif e.result == 'FAILURE' or e.result == 'DENY' or e.result == 'REJECTED' or e.result == 'FAILED' %}deny{% else %}info{% endif %}">{{ e.result }}</span></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="muted">No administrative history recorded for this officer.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "it_admin/base.html" %}
+{% load it_admin_extras %}
+{% block title %}Admin Roles{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>IT administration roles</h2>
+    <p class="muted small">Roles that carry at least one administrative capability. Not every administrator gets everything: capability changes require approval by a second administrator.</p>
+  </div>
+  <div class="page-head__actions">
+    {% if can_manage %}
+      <a class="btn btn--ghost btn--sm" href="{% url 'it_admin:admin_role_assign' %}">Request role assignment</a>
+      <a class="btn btn--primary btn--sm" href="{% url 'it_admin:admin_role_create' %}">New role</a>
+    {% endif %}
+  </div>
+</div>
+
+<table class="table">
+  <thead><tr><th>Role</th><th>Description</th><th>Administrative capabilities</th><th>Operational perms</th><th>Holders</th><th></th></tr></thead>
+  <tbody>
+    {% for r in roles %}
+    <tr>
+      <td><strong>{{ r.name }}</strong>{% if r.is_system_role %}<div class="small muted">system role</div>{% endif %}</td>
+      <td class="small muted">{{ r.description|default:"—" }}</td>
+      <td>{% for c in r.admin_caps %}<span class="badge badge--info mono">{{ c }}</span> {% endfor %}</td>
+      <td class="small">{{ r.operational_count }}</td>
+      <td>{{ r.officer_total }}</td>
+      <td><a class="btn btn--ghost btn--sm" href="{% url 'it_admin:admin_role_detail' r.pk %}">Open</a></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="muted">No administrative roles defined.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="panel">
+  <h3>Capability reference</h3>
+  <table class="table table--compact">
+    <thead><tr><th>Capability</th><th>Meaning</th></tr></thead>
+    <tbody>{% for code, desc in capabilities.items %}<tr><td class="mono small">{{ code }}</td><td class="small">{{ desc }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% endblock %}

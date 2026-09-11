@@ -1,0 +1,19 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Authorization — {{ officer.officer_id }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / <a href="{% url 'it_admin:officer_detail' officer.pk %}">{{ officer.officer_id }}</a> / Authorization</p>
+<h2>Role, clearance &amp; portals — {{ officer.full_name }}</h2>
+<p class="muted small">These are <strong>account authorization attributes</strong>. Changing an administrative role
+  requires approval by a second administrator. Operational authorization (case/evidence access) is managed separately and is never granted here.</p>
+
+<div class="panel" style="max-width:760px;">
+  {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="form-grid">{% include "it_admin/_partials/form_fields.html" %}</div>
+    <button type="submit" class="btn btn--primary">Apply</button>
+    <a class="btn btn--ghost" href="{% url 'it_admin:officer_detail' officer.pk %}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

@@ -1,27 +1,25 @@
-{% extends "portal/base.html" %}
+{% extends "it_admin/base.html" %}
 {% block title %}Security Monitoring{% endblock %}
-{% block portal_label %}IT Department — System Administration{% endblock %}
-{% block portal_name %}IT / Admin Portal{% endblock %}
 
-{% block nav %}
-<div class="nav-section">Identity</div>
-<a href="{% url 'it_admin:officer_list' %}">Officer management</a>
-<a href="{% url 'it_admin:officer_create' %}">Provision officer</a>
-<div class="nav-section">Security</div>
-<a href="{% url 'it_admin:security_dashboard' %}" class="active">Security monitoring</a>
-<div class="nav-section">Accountability</div>
-<a href="{% url 'it_admin:audit_dashboard' %}">Audit logs</a>
-<div class="nav-section">Account</div>
-<a href="{% url 'account_profile' %}">My Account</a>
-{% endblock %}
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Security monitoring</h2>
+    <p class="muted small">Failed logins, lockouts and denied-access signals. Detailed reasons are visible here to authorized security personnel only.</p>
+  </div>
+</div>
 
-{% block content %}
-<h2>Security monitoring</h2>
-<p class="muted small">Failed logins, lockouts and denied-access signals. Detailed reasons are visible here to authorized security personnel only.</p>
+<form method="get" class="filter-bar">
+  <select name="severity">
+    <option value="">Any severity</option>
+    {% for code, label in severities %}<option value="{{ code }}" {% if code == severity %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button class="btn btn--primary btn--sm" type="submit">Filter</button>
+</form>
 
 <table class="table">
   <thead>
-    <tr><th>Time</th><th>Severity</th><th>Event</th><th>Officer</th><th>Source IP</th></tr>
+    <tr><th>Time</th><th>Severity</th><th>Event</th><th>Officer</th><th>Source IP</th><th>Detail</th></tr>
   </thead>
   <tbody>
     {% for e in events %}
@@ -29,12 +27,14 @@
       <td class="mono small">{{ e.occurred_at|date:"Y-m-d H:i:s" }}</td>
       <td><span class="badge badge--{{ e.severity|lower }}">{{ e.severity }}</span></td>
       <td class="mono small">{{ e.event_type }}</td>
-      <td>{{ e.officer.officer_id|default:"—" }}</td>
+      <td>{% if e.officer %}<a href="{% url 'it_admin:officer_detail' e.officer.pk %}">{{ e.officer.officer_id }}</a>{% else %}—{% endif %}</td>
       <td class="mono small">{{ e.source_ip|default:"—" }}</td>
+      <td class="small muted">{% for k, v in e.details.items %}<span class="mono">{{ k }}</span>={{ v }} {% endfor %}</td>
     </tr>
     {% empty %}
-    <tr><td colspan="5" class="muted">No security events recorded.</td></tr>
+    <tr><td colspan="6" class="muted">No security events recorded.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+{% include "it_admin/_partials/pagination.html" with querystring=querystring %}
 {% endblock %}

@@ -1,0 +1,16 @@
+{# Confirmation + mandatory reason for a sensitive POST action.
+   Params: action_url, label, tone (primary|gold|danger|ghost), hidden (dict), next, confirm_text #}
+<details class="confirm">
+  <summary class="btn btn--{{ tone|default:'ghost' }} btn--sm">{{ label }}</summary>
+  <form method="post" action="{{ action_url }}" class="confirm__form">
+    {% csrf_token %}
+    {% for k, v in hidden.items %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <p class="small">{{ confirm_text|default:"This action is recorded in the audit trail." }}</p>
+    <div class="field">
+      <label>Reason</label>
+      <textarea name="reason" rows="2" required minlength="5" placeholder="Reason (recorded in the audit trail)"></textarea>
+    </div>
+    <button type="submit" class="btn btn--{{ tone|default:'primary' }} btn--sm">Confirm: {{ label }}</button>
+  </form>
+</details>

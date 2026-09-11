@@ -1,0 +1,21 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Devices — {{ officer.officer_id }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:officer_list' %}">Officer management</a> / <a href="{% url 'it_admin:officer_detail' officer.pk %}">{{ officer.officer_id }}</a> / Devices &amp; sessions</p>
+<div class="page-head">
+  <div><h2>Devices &amp; sessions — {{ officer.full_name }}</h2></div>
+  <div class="page-head__actions">
+    {% if can_terminate %}{% url 'it_admin:session_terminate_all' officer.pk as all_url %}{% url 'it_admin:officer_devices_sessions' officer.pk as next_url %}
+      {% include "it_admin/_partials/reason_action.html" with action_url=all_url label="Terminate all sessions" tone="danger" next=next_url confirm_text="Signs the officer out everywhere." %}
+    {% endif %}
+  </div>
+</div>
+{% url 'it_admin:officer_devices_sessions' officer.pk as next_url %}
+{% if devices is not None %}
+<div class="panel"><h3>Registered devices</h3>{% include "it_admin/_partials/device_table.html" %}</div>
+{% endif %}
+{% if sessions is not None %}
+<div class="panel"><h3>Sessions (latest 50)</h3>{% include "it_admin/_partials/session_table.html" %}</div>
+{% endif %}
+{% endblock %}

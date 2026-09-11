@@ -1,0 +1,36 @@
+{% extends "it_admin/base.html" %}
+{% block title %}{% if creating %}New{% else %}Edit{% endif %} {{ kind }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url back %}">{{ kind }}s</a> / {% if creating %}New{% else %}{{ obj }}{% endif %}</p>
+<h2>{% if creating %}New {{ kind|lower }}{% else %}Edit {{ kind|lower }} — {{ obj }}{% endif %}</h2>
+{% if kind == "Designation" %}<p class="muted small">Rank level is for ordering/display only and confers no authorization.</p>{% endif %}
+
+<div class="two-col">
+  <div class="panel">
+    {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% include "it_admin/_partials/form_fields.html" %}
+      <button type="submit" class="btn btn--primary">{% if creating %}Create{% else %}Save changes{% endif %}</button>
+      <a class="btn btn--ghost" href="{% url back %}">Cancel</a>
+    </form>
+  </div>
+
+  {% if not creating %}
+  <div class="panel">
+    <h3>Officers {% if kind == "Designation" %}holding this designation{% elif kind == "Unit" %}posted to this unit{% else %}in this department{% endif %} ({{ officers|length }})</h3>
+    {% if officers %}
+    <table class="table table--compact">
+      <thead><tr><th>Officer</th><th>Name</th><th>Status</th></tr></thead>
+      <tbody>{% for o in officers %}<tr><td class="mono"><a href="{% url 'it_admin:officer_detail' o.pk %}">{{ o.officer_id }}</a></td><td>{{ o.full_name }}</td><td><span class="badge badge--{{ o.account_status|lower }}">{{ o.account_status }}</span></td></tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<p class="muted small">None.</p>{% endif %}
+    {% if units %}
+    <h4>Units</h4>
+    <ul class="event-list small">{% for u in units %}<li><a href="{% url 'it_admin:unit_edit' u.pk %}">{{ u.name }}</a> {% if not u.is_active %}<span class="badge badge--disabled">INACTIVE</span>{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

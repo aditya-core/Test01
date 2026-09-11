@@ -1,0 +1,47 @@
+{% extends "it_admin/base.html" %}
+{% load it_admin_extras %}
+{% block title %}Role — {{ role.name }}{% endblock %}
+
+{% block admin_content %}
+<p class="crumbs small"><a href="{% url 'it_admin:admin_role_list' %}">Admin roles</a> / {{ role.name }}</p>
+<h2>{{ role.name }}</h2>
+<p class="muted small">{{ role.description|default:"" }} {% if operational %}This role also carries {{ operational|length }} operational permission{{ operational|pluralize }} which are managed separately and are never changed from this page.{% endif %}</p>
+
+{% if pending %}
+<div class="notice">Pending approval: {% for p in pending %}<a href="{% url 'it_admin:approval_detail' p.pk %}">{{ p.summary }}</a> (by {{ p.requested_by.officer_id }}){% if not forloop.last %}; {% endif %}{% endfor %}</div>
+{% endif %}
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Administrative capabilities ({{ current|length }})</h3>
+    {% if current %}
+      <table class="table table--compact"><tbody>{% for c in current %}<tr><td class="mono small">{{ c }}</td><td class="small muted">{{ descriptions|get_item:c }}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<p class="muted small">None.</p>{% endif %}
+
+    <h4>Officers holding this role ({{ holders|length }})</h4>
+    {% if holders %}
+      <ul class="event-list small">{% for o in holders %}<li><a href="{% url 'it_admin:officer_detail' o.pk %}" class="mono">{{ o.officer_id }}</a> — {{ o.full_name }} <span class="badge badge--{{ o.account_status|lower }}">{{ o.account_status }}</span></li>{% endfor %}</ul>
+    {% else %}<p class="muted small">No officers.</p>{% endif %}
+  </div>
+
+  {% if can_manage %}
+  <div class="panel">
+    <h3>Request capability change</h3>
+    <p class="small muted">Submits a four-eyes request. A <em>different</em> administrator with <span class="mono">approval.review</span> must approve before anything changes.</p>
+    {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="field">
+        <label>Capabilities</label>
+        <div class="checkbox-grid">
+          {% for cb in form.capabilities %}<label class="small">{{ cb.tag }} <span class="mono">{{ cb.choice_label }}</span></label>{% endfor %}
+        </div>
+        {% for e in form.capabilities.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field"><label>Reason</label>{{ form.reason }}{% for e in form.reason.errors %}<div class="error">{{ e }}</div>{% endfor %}</div>
+      <button type="submit" class="btn btn--gold">Submit for approval</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

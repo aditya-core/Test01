@@ -1,0 +1,51 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Approval Center{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Approval center</h2>
+    <p class="muted small">Sensitive operations need two administrators: the requester and an approver. You cannot approve your own request.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>Pending ({{ pending|length }})</h3>
+  {% if pending %}
+  <table class="table">
+    <thead><tr><th>Requested</th><th>Action</th><th>Target</th><th>Summary</th><th>Requester</th><th></th></tr></thead>
+    <tbody>{% for r in pending %}
+      <tr>
+        <td class="small">{{ r.requested_at|date:"Y-m-d H:i" }}</td>
+        <td class="small">{{ r.get_action_display }}</td>
+        <td class="small">{{ r.target_label|default:r.target_id }}</td>
+        <td class="small">{{ r.summary }}<div class="muted">{{ r.reason }}</div></td>
+        <td class="mono small">{{ r.requested_by.officer_id }}{% if r.requested_by_id == request.user.pk %} <span class="badge badge--info">you</span>{% endif %}</td>
+        <td><a class="btn btn--primary btn--sm" href="{% url 'it_admin:approval_detail' r.pk %}">{% if can_review and r.requested_by_id != request.user.pk %}Decide{% else %}Open{% endif %}</a></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted small">Nothing pending.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h3>History</h3>
+  {% if history.object_list %}
+  <table class="table table--compact">
+    <thead><tr><th>Requested</th><th>Action</th><th>Target</th><th>Requester</th><th>Decided by</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for r in history.object_list %}
+      <tr>
+        <td class="small">{{ r.requested_at|date:"Y-m-d H:i" }}</td>
+        <td class="small">{{ r.get_action_display }}</td>
+        <td class="small">{{ r.target_label|default:r.target_id }}</td>
+        <td class="mono small">{{ r.requested_by.officer_id }}</td>
+        <td class="mono small">{{ r.decided_by.officer_id|default:"—" }}</td>
+        <td><span class="badge badge--{% if r.status == 'APPROVED' %}success{% elif r.status == 'REJECTED' or r.status == 'FAILED' %}deny{% else %}info{% endif %}">{{ r.status }}</span></td>
+        <td><a class="small" href="{% url 'it_admin:approval_detail' r.pk %}">details</a></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  {% include "it_admin/_partials/pagination.html" with page=history %}
+  {% else %}<p class="muted small">No decided requests yet.</p>{% endif %}
+</div>
+{% endblock %}

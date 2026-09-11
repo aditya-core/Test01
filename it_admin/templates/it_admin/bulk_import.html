@@ -1,0 +1,31 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Bulk Import{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <h2>Bulk officer import</h2>
+    <p class="muted small">Upload → validate → preview → confirm → process → result. Nothing is written until you confirm the preview. Each row is validated against the live registry; row-level errors are reported and never silently skipped.</p>
+  </div>
+  <div class="page-head__actions"><a class="btn btn--ghost btn--sm" href="{% url 'it_admin:bulk_template' %}">Download CSV template</a></div>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>1 · Upload</h3>
+    {% if form.non_field_errors %}<div class="form-errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% include "it_admin/_partials/form_fields.html" %}
+      <button type="submit" class="btn btn--primary">Validate file</button>
+    </form>
+  </div>
+  <div class="panel">
+    <h3>Format</h3>
+    <p class="small">Required columns: <span class="mono">full_name, email</span>. Optional: <span class="mono">officer_id, employee_id, phone, designation, department, unit, role, joining_date, portals</span> (portals separated by <span class="mono">;</span>). At most {{ max_rows }} rows per file.</p>
+    <p class="small">Imported officers are created in <strong>INVITED</strong> status with a random provisional password; issue credentials via the normal reset flow.</p>
+    {% if not may_authorize %}<p class="notice small">You do not hold <span class="mono">officer.authorization</span>: role and portal columns will be ignored at commit.</p>{% endif %}
+    <p class="small muted">Sensitive data is never exported from this portal.</p>
+  </div>
+</div>
+{% endblock %}
