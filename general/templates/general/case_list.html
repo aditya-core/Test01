@@ -1,0 +1,184 @@
+{% extends "portal/base.html" %}
+{% block title %}View Cases{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:register_case' %}">Register Case</a>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:dashboard' %}">Dashboard</a> / View Cases</div>
+    <h2>Case register</h2>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--primary" href="{% url 'general:register_case' %}">Register Case</a>
+  </div>
+</div>
+
+<div class="panel">
+  <form method="get" class="filter-bar">
+    <div class="filter-bar__grow">
+      <input type="text" name="q" value="{{ query }}" placeholder="Search by case ID, title, agency, station..." />
+    </div>
+    <button type="submit" class="btn btn--ghost">Search</button>
+  </form>
+
+  {% if cases %}
+    <div class="case-folder-grid case-folder-grid--full">
+      {% for case in cases %}
+        <button type="button" class="case-folder case-folder--detail" data-case-id="{{ case.case_id }}" data-case-title="{{ case.title|escapejs }}" data-case-type="{{ case.case_type|escapejs }}" data-case-status="{{ case.status|escapejs }}" data-case-agency="{{ case.investigating_agency|default:'—'|escapejs }}" data-case-station="{{ case.police_station|default:'—'|escapejs }}" data-case-location="{{ case.location|default:'—'|escapejs }}" data-case-date="{{ case.incident_date|date:'d M Y' }}" data-case-summary="{{ case.summary|default:'No summary provided.'|escapejs }}" data-case-complainant="{{ case.complainant_name|default:'—'|escapejs }}" data-case-contact="{{ case.complainant_contact|default:'—'|escapejs }}" data-case-created="{{ case.created_at|date:'d M Y' }}" data-case-updated="{{ case.updated_at|date:'d M Y' }}" data-case-fir="{% if case.fir_document %}{{ case.fir_document.url }}{% endif %}">
+          <div class="case-folder__icon">📁</div>
+          <div class="case-folder__meta">
+            <div class="case-folder__id">{{ case.case_id }}</div>
+            <div class="case-folder__title">{{ case.title }}</div>
+          </div>
+          <div class="case-folder__status"><span class="badge badge--info">{{ case.status }}</span></div>
+        </button>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No cases found for this account.</p>
+  {% endif %}
+</div>
+
+<div id="case-detail-modal" class="case-modal" aria-hidden="true">
+  <div class="case-modal__backdrop" data-close="modal"></div>
+  <div class="case-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="case-modal-title">
+    <div class="case-modal__header">
+      <div>
+        <div class="crumbs">Case record / Document</div>
+        <h3 id="case-modal-title">Case File</h3>
+      </div>
+      <button type="button" class="case-modal__close" data-close="modal" aria-label="Close case detail">×</button>
+    </div>
+
+    <div class="case-document">
+      <div class="case-document__header">
+        <div>
+          <div class="case-document__eyebrow">Police Investigation Record</div>
+          <h4 id="case-document-id">CASE-0000</h4>
+        </div>
+        <div class="case-document__badge" id="case-doc-status">Open</div>
+      </div>
+
+      <div class="case-document__meta">
+        <div><span>Case Type</span><strong id="case-doc-type">—</strong></div>
+        <div><span>Agency</span><strong id="case-doc-agency">—</strong></div>
+        <div><span>Police Station</span><strong id="case-doc-station">—</strong></div>
+        <div><span>Incident Date</span><strong id="case-doc-date">—</strong></div>
+      </div>
+
+      <div class="case-document__section">
+        <h5>Summary</h5>
+        <p id="case-doc-summary">—</p>
+      </div>
+
+      <div class="case-document__grid">
+        <div class="case-document__section">
+          <h5>Complainant</h5>
+          <p><strong>Name:</strong> <span id="case-doc-complainant">—</span></p>
+          <p><strong>Contact:</strong> <span id="case-doc-contact">—</span></p>
+        </div>
+        <div class="case-document__section">
+          <h5>Location</h5>
+          <p id="case-doc-location">—</p>
+        </div>
+      </div>
+
+      <div class="case-document__section">
+        <h5>Case Timeline</h5>
+        <p><strong>Created:</strong> <span id="case-doc-created">—</span></p>
+        <p><strong>Last updated:</strong> <span id="case-doc-updated">—</span></p>
+      </div>
+
+      <div class="case-document__signature-row">
+        <div class="case-document__signature">
+          <span>Officer Signature</span>
+          <div class="signature-line"></div>
+        </div>
+        <div class="case-document__stamp">
+          <span>Official Stamp</span>
+          <div class="stamp-box">CONFIRMED</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="case-modal__actions">
+      <a id="case-fir-download" href="#" target="_blank" rel="noopener" class="btn btn--primary">Download FIR</a>
+      <button type="button" class="btn btn--ghost" onclick="window.print()">Save as PDF</button>
+      <button type="button" class="btn btn--ghost" data-close="modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const modal = document.getElementById('case-detail-modal');
+    const closeTriggers = document.querySelectorAll('[data-close="modal"]');
+    const cards = document.querySelectorAll('.case-folder--detail');
+
+    function openCaseModal(card) {
+      if (!modal) return;
+      const attrs = card.dataset;
+      document.getElementById('case-modal-title').textContent = attrs.caseTitle || 'Case File';
+      document.getElementById('case-document-id').textContent = attrs.caseId || 'CASE-0000';
+      document.getElementById('case-doc-status').textContent = attrs.caseStatus || 'Open';
+      document.getElementById('case-doc-type').textContent = attrs.caseType || '—';
+      document.getElementById('case-doc-agency').textContent = attrs.caseAgency || '—';
+      document.getElementById('case-doc-station').textContent = attrs.caseStation || '—';
+      document.getElementById('case-doc-date').textContent = attrs.caseDate || '—';
+      document.getElementById('case-doc-summary').textContent = attrs.caseSummary || 'No summary provided.';
+      document.getElementById('case-doc-complainant').textContent = attrs.caseComplainant || '—';
+      document.getElementById('case-doc-contact').textContent = attrs.caseContact || '—';
+      document.getElementById('case-doc-location').textContent = attrs.caseLocation || '—';
+      document.getElementById('case-doc-created').textContent = attrs.caseCreated || '—';
+      document.getElementById('case-doc-updated').textContent = attrs.caseUpdated || '—';
+
+      const firLink = document.getElementById('case-fir-download');
+      if (attrs.caseFir) {
+        firLink.href = attrs.caseFir;
+        firLink.style.display = 'inline-flex';
+      } else {
+        firLink.href = '#';
+        firLink.style.display = 'none';
+      }
+
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeCaseModal() {
+      if (!modal) return;
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    cards.forEach((card) => {
+      card.addEventListener('click', function () { openCaseModal(card); });
+    });
+
+    closeTriggers.forEach((trigger) => {
+      trigger.addEventListener('click', function () { closeCaseModal(); });
+    });
+
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.classList.contains('case-modal__backdrop')) {
+        closeCaseModal();
+      }
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && modal && modal.classList.contains('is-open')) {
+        closeCaseModal();
+      }
+    });
+  })();
+</script>
+{% endblock %}

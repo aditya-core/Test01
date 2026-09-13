@@ -13,14 +13,90 @@
 {% endblock %}
 
 {% block content %}
-<h2>Welcome, {{ request.user.full_name }}</h2>
-<p class="muted small">Dashboard generated from your authorization profile. Capabilities you do not hold are not offered.</p>
+<div class="dashboard-hero">
+  <div>
+    <div class="crumbs">Operations / Dashboard</div>
+    <h2>Welcome back, {{ request.user.full_name }}</h2>
+    <p>Case operations dashboard for {{ caps.unit|default:"General Unit" }}. Keep all active investigations visible and security-ready.</p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--primary" href="{% url 'general:register_case' %}">Register Case</a>
+    <a class="btn btn--ghost" href="{% url 'general:view_cases' %}">View Cases</a>
+  </div>
+</div>
 
-<div class="stat-grid">
-  <div class="stat"><div class="stat__value">{{ caps.clearance|default:"—" }}</div><div class="stat__label">Clearance</div></div>
-  <div class="stat"><div class="stat__value">{{ caps.role|default:"—" }}</div><div class="stat__label">Role</div></div>
-  <div class="stat"><div class="stat__value">{{ caps.unit|default:"—" }}</div><div class="stat__label">Unit</div></div>
-  <div class="stat"><div class="stat__value">{{ caps.organization|default:"—" }}</div><div class="stat__label">Organization</div></div>
+<div class="stat-grid dashboard-stats">
+  <div class="stat stat--police">
+    <div class="stat__meta">Clearance</div>
+    <div class="stat__value">{{ caps.clearance|default:"—" }}</div>
+    <div class="stat__label">Current access level</div>
+  </div>
+  <div class="stat stat--police">
+    <div class="stat__meta">Role</div>
+    <div class="stat__value">{{ caps.role|default:"—" }}</div>
+    <div class="stat__label">Operational designation</div>
+  </div>
+  <div class="stat stat--police">
+    <div class="stat__meta">Unit</div>
+    <div class="stat__value">{{ caps.unit|default:"—" }}</div>
+    <div class="stat__label">Assigned department</div>
+  </div>
+  <div class="stat stat--police">
+    <div class="stat__meta">Recent</div>
+    <div class="stat__value">{{ recent_cases|length }}</div>
+    <div class="stat__label">Open case folders</div>
+  </div>
+</div>
+
+<div class="panel panel--hero">
+  <div class="panel__head panel__head--spaced">
+    <div>
+      <h3>Quick actions</h3>
+      <p class="muted small">Authorized workflow access and active case management.</p>
+    </div>
+  </div>
+  <div class="action-grid">
+    <a href="{% url 'general:register_case' %}" class="action-card action-card--primary">
+      <span class="action-card__icon">📁</span>
+      <span class="action-card__text">
+        <strong>Register Case</strong>
+        <small>Create a new incident record</small>
+      </span>
+    </a>
+    <a href="{% url 'general:view_cases' %}" class="action-card action-card--muted">
+      <span class="action-card__icon">🗂️</span>
+      <span class="action-card__text">
+        <strong>View Cases</strong>
+        <small>Review stored files and records</small>
+      </span>
+    </a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel__head panel__head--spaced">
+    <div>
+      <h3>Recent cases</h3>
+      <p class="muted small">Latest case folders opened or updated by this officer.</p>
+    </div>
+  </div>
+
+  {% if recent_cases %}
+    <div class="case-folder-grid">
+      {% for case in recent_cases %}
+        <a class="case-folder" href="{% url 'general:view_cases' %}#case-{{ case.case_id }}">
+          <div class="case-folder__icon">📁</div>
+          <div class="case-folder__meta">
+            <div class="case-folder__id">{{ case.case_id }}</div>
+            <div class="case-folder__title">{{ case.title }}</div>
+          </div>
+          <div class="case-folder__status"><span class="badge badge--info">{{ case.status }}</span></div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No recent case files yet. Use the highlighted Register Case button to create one.</p>
+  {% endif %}
 </div>
 
 <div class="panel">
@@ -34,14 +110,5 @@
   {% else %}
     <p class="muted">No capabilities granted. Contact Central IT if you require access.</p>
   {% endif %}
-</div>
-
-<div class="panel">
-  <h3>Operational workspace</h3>
-  <p class="muted small">
-    Case, document and evidence modules will plug into this portal. Each resource
-    access will be mediated by the central authorization engine (identity →
-    clearance → scope → case → action).
-  </p>
 </div>
 {% endblock %}
