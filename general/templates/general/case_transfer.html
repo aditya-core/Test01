@@ -1,0 +1,57 @@
+{% extends "portal/base.html" %}
+{% block title %}Transfer Case{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:case_detail' case.case_id %}">{{ case.case_id }}</a> / Transfer</div>
+    <h2>Transfer Case</h2>
+  </div>
+</div>
+
+<div class="panel">
+  <p class="muted small">
+    Access is always derived from the case's <strong>current</strong> location.
+    After transfer, officers in the destination gain access and jurisdiction-derived
+    access moves with the case. The original creator keeps access only through their
+    explicit case assignment.
+  </p>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="form-grid">
+      <div class="field">
+        <label for="{{ form.to_unit.id_for_label }}">Destination station / unit</label>
+        {{ form.to_unit }}
+        {% for e in form.to_unit.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="{{ form.to_organization.id_for_label }}">Destination jurisdiction</label>
+        {{ form.to_organization }}
+        {% for e in form.to_organization.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="{{ form.reason.id_for_label }}">Reason <span class="req">*</span></label>
+      {{ form.reason }}
+      {% for e in form.reason.errors %}<div class="error">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn btn--primary">Transfer Case</button>
+      <a class="btn btn--ghost" href="{% url 'general:case_detail' case.case_id %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

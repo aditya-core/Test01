@@ -39,12 +39,54 @@ class ResourceRequirement:
     the permitted actions to exactly that set — an empty set allows nothing.
     """
 
+    resource_type: Optional[str] = None         # "case" | "fir" | "evidence" | "document"
+    resource_id: Optional[str] = None           # id of the protected resource
     classification_code: Optional[str] = None   # e.g. "L4"
     organization_id: Optional[int] = None       # required organization
     unit_id: Optional[int] = None               # required unit
-    case_id: Optional[str] = None               # required case assignment
+    case_id: Optional[str] = None               # parent case (for file resources)
     required_permission: Optional[str] = None   # e.g. "case.view"
     allowed_actions: Optional[frozenset] = None
+
+
+class ActionSet(set):
+    """A set of granted actions that also records which path granted each.
+
+    Keeps the "why" attached to the decision so the UI can explain access
+    instead of guessing (directive §15 / §21).
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.paths: set = set()
+
+    def add(self, action, path: str):  # type: ignore[override]
+        super().add(action)
+        if path:
+            self.paths.add(path)
+
+
+class AccessDecision:
+    """The result of one authorization decision."""
+
+    def __init__(self, allowed: bool, action: str = "", reason: str = "", stage: str = ""):
+        self.allowed = allowed
+        self.action = action
+        self.reason = reason
+        self.stage = stage
+        self.paths: list = []
+        self.available_actions: list = []
+        self.resource_type = ""
+        self.resource_id = ""
+
+    def __bool__(self) -> bool:
+        return self.allowed
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            f"<AccessDecision {'ALLOW' if self.allowed else 'DENY'} "
+            f"{self.action} stage={self.stage or '-'} paths={self.paths}>"
+        )
 
 
 class AuthorizationService:
@@ -351,50 +393,278 @@ class AuthorizationService:
         return self.authorize(user, action=action, resource=resource, portal=portal)
 
     # ------------------------------------------------------------------ #
-    # Case authorization (operational domain)
+    # Resource authorization (operational domain)
+    #
+    # ONE central decision process, in a fixed order. Hard security
+    # restrictions are evaluated first and can never be overridden by an
+    # explicit grant (directive §12).
     # ------------------------------------------------------------------ #
-    def case_actions(self, user, case) -> frozenset:
-        """The actions ``user`` may perform on ``case``, from their assignment.
+    def authorize_resource(self, user, resource, action: str, portal: str = ""):
+        """The single decision function for cases, FIRs, evidence and documents.
 
-        Resolved through the ``case_actions_for`` hook so the operational
-        domain keeps ownership of the data. Fail closed if the hook is absent
-        or raises.
+        Returns an :class:`AccessDecision` (truthy when allowed) carrying the
+        reason and the path that granted access, so callers can audit and the
+        UI can explain itself.
         """
-        resolver = getattr(user, "case_actions_for", None)
-        if not callable(resolver):
-            return frozenset()
-        try:
-            actions = resolver(case)
-        except Exception:
-            return frozenset()
-        return frozenset(a for a in actions if a in C.CASE_ACTIONS)
+        decision = AccessDecision(allowed=False, action=action)
 
-    def can_access_case(self, user, case, action: str = C.ACTION_CASE_VIEW) -> bool:
-        """Operational case authorization — every layer must pass:
-
-        1. classification — officer clearance >= case classification,
-        2. organizational scope — officer is posted in the case jurisdiction,
-        3. case assignment — an explicit, active grant (deny by default),
-        4. action capability — the ``case.*`` permission the action requires,
-        5. action ceiling — what the officer's assignment role allows.
-
-        Any failure denies. Steps 1–3 are evaluated by the generic engine via
-        the resource protocol (``case.security_requirement``); 4 and 5 are
-        per-officer and resolved here.
-        """
+        # -- Steps 1-2: identity and account state (hard restriction) --------
         if not self._is_active_identity(user):
-            return False
-        if not action:
-            return False
-        requirement = getattr(case, "security_requirement", None)
+            decision.reason = "Identity is not active."
+            decision.stage = "identity"
+            return decision
+
+        # -- Step 3: portal authority ---------------------------------------
+        if portal and not self.can_access_portal(user, portal):
+            decision.reason = "Portal access denied."
+            decision.stage = "portal"
+            return decision
+
+        requirement = self._requirement_of(resource)
         if requirement is None:
-            return False
-        if not self.authorize(user, action=action, requirement=requirement):
-            return False
+            decision.reason = "Resource declares no security policy."
+            decision.stage = "policy"
+            return decision
+        if not action:
+            decision.reason = "No action requested."
+            decision.stage = "action"
+            return decision
+
+        decision.resource_type = requirement.resource_type or ""
+        decision.resource_id = requirement.resource_id or ""
+
+        # -- Step 13 / hard restriction: clearance vs classification ---------
+        if not self._clearance_satisfied(user, requirement):
+            decision.reason = "Insufficient clearance for this classification."
+            decision.stage = "clearance"
+            return decision
+
+        # -- Step 6: organizational / jurisdictional scope --------------------
+        if not self._in_scope(user, requirement):
+            decision.reason = "Resource is outside the officer's jurisdiction."
+            decision.stage = "scope"
+            return decision
+
+        # -- Steps 7-12: the access paths ------------------------------------
+        actions = self._granted_actions(user, requirement)
+        decision.available_actions = sorted(actions)
+        decision.paths = sorted(actions.paths)
+
+        if not actions:
+            decision.reason = "No ownership, hierarchy, assignment or grant applies."
+            decision.stage = "access_path"
+            return decision
+
+        # -- Action permission: the capability the action requires -----------
         needed = C.CASE_ACTION_PERMISSIONS.get(action)
         if needed and not self.has_permission(user, needed):
+            decision.reason = f"Role does not carry {needed}."
+            decision.stage = "capability"
+            return decision
+
+        # -- Action permission: does the winning path allow this action? -----
+        if action not in actions:
+            allowed = sorted(actions)
+            decision.reason = (
+                f"Access path permits {', '.join(allowed)} but not '{action}'."
+                if allowed else "Access path permits no actions."
+            )
+            decision.stage = "action_permission"
+            return decision
+
+        if requirement.allowed_actions is not None and action not in requirement.allowed_actions:
+            decision.reason = "Action is not valid for this resource type."
+            decision.stage = "action_permission"
+            return decision
+
+        decision.allowed = True
+        decision.reason = f"Allowed via {', '.join(sorted(actions.paths))}." if actions.paths else "Allowed."
+        decision.stage = "allow"
+        return decision
+
+    def can_access_resource(self, user, resource, action: str, portal: str = "") -> bool:
+        """Boolean convenience wrapper around :meth:`authorize_resource`."""
+        return bool(self.authorize_resource(user, resource, action, portal=portal))
+
+    def case_actions(self, user, case) -> frozenset:
+        """The action ceiling ``user`` has on ``case`` (fail closed)."""
+        if case is None or not self._is_active_identity(user):
+            return frozenset()
+        return frozenset(self._granted_actions(user, self._requirement_of(case)))
+
+    def can_access_case(self, user, case, action: str = C.ACTION_VIEW) -> bool:
+        """Case authorization — delegates to the central decision process."""
+        return self.can_access_resource(user, case, action)
+
+    def explain_resource_access(self, user, resource, action: str, portal: str = "") -> dict:
+        """Human-readable WHY for the grant / access UI (directive §15)."""
+        decision = self.authorize_resource(user, resource, action, portal=portal)
+        return {
+            "action": action,
+            "allowed": decision.allowed,
+            "stage": decision.stage,
+            "reason": decision.reason,
+            "paths": decision.paths,
+            "available_actions": decision.available_actions,
+        }
+
+    # -- Decision internals ------------------------------------------------
+    def _requirement_of(self, resource):
+        requirement = getattr(resource, "security_requirement", None)
+        return requirement if isinstance(requirement, ResourceRequirement) else None
+
+    def _clearance_satisfied(self, user, requirement) -> bool:
+        if not requirement.classification_code:
+            return True
+        return self.has_clearance(user, requirement.classification_code)
+
+    def _in_scope(self, user, requirement) -> bool:
+        """Jurisdictional containment (step 6).
+
+        An officer reaches resources inside their own jurisdiction tree. A
+        resource with no recorded jurisdiction is treated as unrestricted by
+        scope — every other layer still applies.
+        """
+        if requirement.organization_id is None and requirement.unit_id is None:
+            return True
+        if requirement.organization_id is not None:
+            jurisdiction_ids = set(user.jurisdiction_ids())
+            if not jurisdiction_ids:
+                return False
+            if requirement.organization_id not in jurisdiction_ids:
+                return False
+        return True
+
+    def _resolve_case(self, requirement):
+        """Load the parent case for a file resource (fail closed)."""
+        from django.apps import apps
+
+        if not requirement.case_id:
+            return None
+        try:
+            model = apps.get_model("general", "CaseRecord")
+        except LookupError:
+            return None
+        return model.objects.filter(case_id=requirement.case_id).first()
+
+    def _granted_actions(self, user, requirement) -> "ActionSet":
+        """Union every access path's allowed actions for this resource.
+
+        Order reflects the documented precedence (directive §12): ownership,
+        hierarchical inheritance, assignment, then explicit grants. A grant is
+        an additional path — it can only ever *add* actions, never restore
+        something a hard restriction removed.
+        """
+        granted = ActionSet()
+        case = self._resolve_case(requirement)
+        ceiling = requirement.allowed_actions
+
+        def add(actions: frozenset, path: str):
+            for action in actions:
+                if ceiling is None or action in ceiling:
+                    granted.add(action, path)
+
+        # Step 7 — ownership.
+        if case is not None and case.created_by_id == user.pk:
+            add(C.ASSIGNMENT_ROLE_ACTIONS[C.ASSIGNMENT_OWNER], "ownership")
+
+        # Step 8 — hierarchical inheritance (real relationships, not rank).
+        if case is not None and self._hierarchy_reaches(user, case):
+            add(C.ASSIGNMENT_ROLE_ACTIONS[C.ASSIGNMENT_SUPERVISOR], "hierarchy")
+
+        # Step 9 — case assignment.
+        if case is not None:
+            add(self.case_assignment_actions(user, case), "assignment")
+
+        # Steps 10-12 — explicit access grants (officer / department / station
+        # / jurisdiction), honouring start, expiry and revocation.
+        add(self._grant_actions(user, requirement), "grant")
+
+        return granted
+
+    def case_assignment_actions(self, user, case) -> frozenset:
+        """Actions from the officer's active CaseAssignment rows."""
+        model = self._case_assignment_model()
+        if model is None or case is None:
+            return frozenset()
+        actions: set = set()
+        for assignment in model.objects.filter(case=case, officer=user, revoked_at__isnull=True):
+            actions |= assignment.allowed_actions
+        return frozenset(actions)
+
+    def _hierarchy_reaches(self, user, case) -> bool:
+        """Does the supervisory / unit tree put ``case`` under ``user``?
+
+        Uses the real reporting relationship only. Rank, designation and
+        seniority are deliberately not consulted (directive §7): a constable
+        supervising a case reaches it, and a senior officer outside the tree
+        does not.
+        """
+        if case is None:
             return False
-        return action in self.case_actions(user, case)
+        descendants = set(user.descendant_ids())
+
+        if case.created_by_id and case.created_by_id in descendants:
+            return True
+
+        model = self._case_assignment_model()
+        if model is not None:
+            assignee_ids = set(
+                model.objects.filter(case=case, revoked_at__isnull=True)
+                .values_list("officer_id", flat=True)
+            )
+            if assignee_ids & descendants:
+                return True
+
+        # Unit tree: the officer's unit is an ancestor of the case's station.
+        if case.unit_id and user.unit_id:
+            from accounts.models import unit_descendant_ids
+
+            if case.unit_id in set(unit_descendant_ids(user.unit_id)):
+                return True
+        return False
+
+    def _grant_actions(self, user, requirement) -> frozenset:
+        """Actions conferred by currently-effective AccessGrant rows."""
+        model = self._access_grant_model()
+        if model is None:
+            return frozenset()
+        from django.db.models import Q
+        from django.utils import timezone
+
+        now = timezone.now()
+        resource_ids = [i for i in (requirement.resource_id, requirement.case_id) if i]
+        if not resource_ids:
+            return frozenset()
+
+        candidates = model.objects.filter(
+            status=C.GRANT_STATUS_ACTIVE,
+            resource_id__in=resource_ids,
+            starts_at__lte=now,
+        ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+
+        actions: set = set()
+        for grant in candidates:
+            actions |= grant.actions_for_officer(user)
+        return frozenset(actions)
+
+    @staticmethod
+    def _case_assignment_model():
+        from django.apps import apps
+
+        try:
+            return apps.get_model("general", "CaseAssignment")
+        except LookupError:
+            return None
+
+    @staticmethod
+    def _access_grant_model():
+        from django.apps import apps
+
+        try:
+            return apps.get_model("general", "AccessGrant")
+        except LookupError:
+            return None
 
     # ------------------------------------------------------------------ #
     # Internals

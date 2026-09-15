@@ -1,0 +1,125 @@
+{% extends "portal/base.html" %}
+{% block title %}{{ case.case_id }}{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:register_case' %}">Register Case</a>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:dashboard' %}">Dashboard</a> / <a href="{% url 'general:view_cases' %}">Cases</a> / {{ case.case_id }}</div>
+    <h2>{{ case.title }}</h2>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost" href="{% url 'general:case_access' case.case_id %}">Access Management</a>
+    {% if can_transfer %}<a class="btn btn--ghost" href="{% url 'general:case_transfer' case.case_id %}">Transfer Case</a>{% endif %}
+    <a class="btn btn--ghost" href="{% url 'general:view_cases' %}">Back</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel__head panel__head--spaced">
+    <div>
+      <h3>Case record</h3>
+      <p class="muted small">Classification {{ case.classification.code|default:"—" }} · Station {{ case.unit.name|default:"—" }} · Jurisdiction {{ case.organization.name|default:"—" }}</p>
+    </div>
+    <span class="badge badge--info">{{ case.status }}</span>
+  </div>
+
+  <div class="kv">
+    <div><span>Case Type</span><strong>{{ case.case_type|default:"—" }}</strong></div>
+    <div><span>Police Station</span><strong>{{ case.police_station|default:"—" }}</strong></div>
+    <div><span>Agency</span><strong>{{ case.investigating_agency|default:"—" }}</strong></div>
+    <div><span>Incident Date</span><strong>{{ case.incident_date|date:"d M Y" }}</strong></div>
+    <div><span>Location</span><strong>{{ case.location|default:"—" }}</strong></div>
+    <div><span>Complainant</span><strong>{{ case.complainant_name|default:"—" }}</strong></div>
+  </div>
+
+  <div class="case-document__section">
+    <h5>Summary</h5>
+    <p>{{ case.summary|default:"No summary provided." }}</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>FIR</h3></div>
+  {% if case.fir_document %}
+    {% if can_download %}
+      <a class="btn btn--primary" href="{% url 'general:download_fir' case.case_id %}">Download FIR</a>
+    {% else %}
+      <p class="muted">An FIR exists, but your access path does not permit downloading it.</p>
+    {% endif %}
+  {% else %}
+    <p class="muted">No FIR uploaded.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Evidence</h3></div>
+  {% if case.evidence_files.all %}
+    <table class="table table--compact">
+      <thead><tr><th>File</th><th>Uploaded</th><th class="nowrap">Action</th></tr></thead>
+      <tbody>
+      {% for evidence in case.evidence_files.all %}
+        <tr>
+          <td class="mono small">{{ evidence.file.name|truncatechars:60 }}</td>
+          <td class="small">{{ evidence.uploaded_at|date:"d M Y" }}</td>
+          <td class="nowrap">
+            {% if can_download %}
+              <a class="btn btn--sm btn--ghost" href="{% url 'general:download_evidence' case.case_id evidence.pk %}">Download</a>
+            {% else %}
+              <span class="muted small">No download permission</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No evidence files.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Documents</h3></div>
+  {% if case.documents.all %}
+    <table class="table table--compact">
+      <thead><tr><th>Title</th><th>Uploaded</th><th class="nowrap">Action</th></tr></thead>
+      <tbody>
+      {% for document in case.documents.all %}
+        <tr>
+          <td>{{ document.title }}</td>
+          <td class="small">{{ document.uploaded_at|date:"d M Y" }}</td>
+          <td class="nowrap">
+            {% if can_download %}
+              <a class="btn btn--sm btn--ghost" href="{% url 'general:download_document' case.case_id document.pk %}">Download</a>
+            {% else %}
+              <span class="muted small">No download permission</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No documents.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Your access</h3></div>
+  <p class="muted small">Granted actions on this case:</p>
+  <div class="cap-list">
+    {% for action in actions %}<span class="badge badge--allow">{{ action }}</span>{% empty %}
+      <span class="muted">No actions granted.</span>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

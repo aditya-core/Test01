@@ -1,0 +1,51 @@
+{% extends "portal/base.html" %}
+{% block title %}Request Access{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:view_cases' %}">Cases</a> / Request Access</div>
+    <h2>🔒 Request Access</h2>
+    <p class="muted small">Case {{ case.case_id }} — you do not currently have access.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <p class="muted small">Your request is routed to an officer who manages access to this case. It is never approved automatically.</p>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="field">
+      <label>Requested permissions</label>
+      <div class="checkbox-grid">{{ form.actions }}</div>
+      {% for e in form.actions.errors %}<div class="error">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.duration_days.id_for_label }}">Duration (days)</label>
+      {{ form.duration_days }}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.reason.id_for_label }}">Reason <span class="req">*</span></label>
+      {{ form.reason }}
+      {% for e in form.reason.errors %}<div class="error">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn btn--primary">Submit Request</button>
+      <a class="btn btn--ghost" href="{% url 'general:view_cases' %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

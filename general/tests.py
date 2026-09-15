@@ -12,6 +12,7 @@ import tempfile
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from unittest.mock import patch
 from django.urls import reverse
 
 from accounts import constants as C
@@ -108,7 +109,7 @@ class GeneralCasePortalTests(BaseAuthTestCase):
         assignment = CaseAssignment.objects.get(case=case, officer=self.field_officer)
         self.assertEqual(assignment.role, C.ASSIGNMENT_OWNER)
         self.assertTrue(assignment.is_active)
-        self.assertIn(C.ACTION_CASE_DOWNLOAD, assignment.allowed_actions)
+        self.assertIn(C.ACTION_DOWNLOAD, assignment.allowed_actions)
 
     def test_officer_without_case_create_cannot_register(self):
         # The senior officer's role carries no case.create capability.
@@ -181,13 +182,13 @@ class GeneralCasePortalTests(BaseAuthTestCase):
         self.assign(case, self.field_officer, role=C.ASSIGNMENT_VIEWER)
 
         # field_officer holds case.download, but VIEWER may only view.
-        self.assertTrue(authorization_service.can_access_case(self.field_officer, case, C.ACTION_CASE_VIEW))
-        self.assertFalse(authorization_service.can_access_case(self.field_officer, case, C.ACTION_CASE_DOWNLOAD))
+        self.assertTrue(authorization_service.can_access_case(self.field_officer, case, C.ACTION_VIEW))
+        self.assertFalse(authorization_service.can_access_case(self.field_officer, case, C.ACTION_DOWNLOAD))
 
     def test_owner_assignment_may_download(self):
         case = self.make_case(self.inspector)
         self.assign(case, self.inspector, role=C.ASSIGNMENT_OWNER)
-        self.assertTrue(authorization_service.can_access_case(self.inspector, case, C.ACTION_CASE_DOWNLOAD))
+        self.assertTrue(authorization_service.can_access_case(self.inspector, case, C.ACTION_DOWNLOAD))
 
     # -- protected file delivery ----------------------------------------------------
     def test_assigned_officer_can_download_fir(self):
@@ -238,3 +239,38 @@ class GeneralCasePortalTests(BaseAuthTestCase):
 
         self.assertNotIn(case.fir_document.url, content)
         self.assertIn(reverse("general:download_fir", kwargs={"case_id": case.case_id}), content)
+
+
+    def test_case_id_allocation_retries_when_the_number_is_taken(self):
+        """A collision on the UNIQUE case_id must not lose or duplicate a case.
+
+        The first allocation is forced to return a number another row already
+        holds, which is exactly what a concurrent registration looks like from
+        the inside: the INSERT fails, and the save must take the next free
+        number instead of propagating a 500 to the officer.
+        """
+        from general import models as general_models
+        from general.models import CaseRecord as CR
+
+        first = self.make_case(self.inspector)
+        real_generator = general_models._generate_case_id
+        calls = {"n": 0}
+
+        def colliding():
+            calls["n"] += 1
+            return first.case_id if calls["n"] == 1 else real_generator()
+
+        with patch.object(general_models, "_generate_case_id", colliding):
+            second = self.make_case(self.inspector)
+
+        self.assertNotEqual(second.case_id, first.case_id)
+        self.assertEqual(CR.objects.filter(case_id=first.case_id).count(), 1)
+        self.assertEqual(CR.objects.filter(pk=second.pk).count(), 1)
+
+    def test_case_ids_are_never_reissued(self):
+        """Sequential registration always allocates distinct identifiers."""
+        from general.models import CaseRecord as CR
+
+        ids = {self.make_case(self.inspector).case_id for _ in range(5)}
+        self.assertEqual(len(ids), 5)
+        self.assertEqual(CR.objects.filter(case_id__in=ids).count(), 5)

@@ -1,0 +1,75 @@
+{% extends "portal/base.html" %}
+{% block title %}Access Requests{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<a href="{% url 'general:access_requests' %}">Access Requests</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:dashboard' %}">Dashboard</a> / Access Requests</div>
+    <h2>Access Requests</h2>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Pending — awaiting your decision</h3></div>
+  {% if pending %}
+    <table class="table table--compact">
+      <thead><tr><th>Requester</th><th>Resource</th><th>Requested</th><th>Duration</th><th>Reason</th><th class="nowrap">Decision</th></tr></thead>
+      <tbody>
+      {% for access_request in pending %}
+        <tr>
+          <td>{{ access_request.requester.officer_id }}<div class="small muted">{{ access_request.requester.full_name }}</div></td>
+          <td class="mono small">{{ access_request.resource_type }}:{{ access_request.resource_id }}</td>
+          <td class="small">{{ access_request.actions|join:", " }}</td>
+          <td class="small">{{ access_request.duration_days }} days</td>
+          <td class="small">{{ access_request.reason }}</td>
+          <td class="nowrap">
+            <form method="post" action="{% url 'general:decide_request' access_request.pk 'approve' %}" class="inline">
+              {% csrf_token %}
+              <input type="text" name="reason" placeholder="Note" maxlength="255" class="small">
+              <button class="btn btn--sm btn--primary">Approve</button>
+            </form>
+            <form method="post" action="{% url 'general:decide_request' access_request.pk 'reject' %}" class="inline">
+              {% csrf_token %}
+              <button class="btn btn--sm btn--ghost">Reject</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No requests awaiting your decision.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Recently decided by you</h3></div>
+  {% if decided %}
+    <table class="table table--compact">
+      <thead><tr><th>Requester</th><th>Resource</th><th>Decision</th><th>When</th></tr></thead>
+      <tbody>
+      {% for access_request in decided %}
+        <tr>
+          <td>{{ access_request.requester.officer_id }}</td>
+          <td class="mono small">{{ access_request.resource_id }}</td>
+          <td><span class="badge badge--{% if access_request.status == 'APPROVED' %}allow{% else %}deny{% endif %}">{{ access_request.status }}</span></td>
+          <td class="small">{{ access_request.decided_at|date:"d M Y H:i" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Nothing decided yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

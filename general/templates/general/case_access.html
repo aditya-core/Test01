@@ -1,0 +1,101 @@
+{% extends "portal/base.html" %}
+{% block title %}Access — {{ case.case_id }}{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:case_detail' case.case_id %}">{{ case.case_id }}</a> / Access Management</div>
+    <h2>Access Management</h2>
+  </div>
+  <div class="page-head__actions">
+    {% if can_manage_access %}
+      <a class="btn btn--primary" href="{% url 'general:grant_access' case.case_id %}">+ Grant Access</a>
+    {% endif %}
+    <a class="btn btn--ghost" href="{% url 'general:case_detail' case.case_id %}">Back to case</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Current access</h3></div>
+  <table class="table table--compact">
+    <thead><tr><th>Officer</th><th>Source</th><th>Actions</th><th>Status</th><th class="nowrap"></th></tr></thead>
+    <tbody>
+    {% for assignment in assignments %}
+      <tr>
+        <td>{{ assignment.officer.officer_id }} — {{ assignment.officer.full_name }}</td>
+        <td>Case assignment ({{ assignment.role }})</td>
+        <td class="small">{{ assignment.allowed_actions|join:", " }}</td>
+        <td><span class="badge badge--active">Active</span></td>
+        <td></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">No assignments.</td></tr>
+    {% endfor %}
+
+    {% for grant in grants %}
+      <tr>
+        <td>{{ grant.recipient_label }}</td>
+        <td>Explicit — {{ grant.grantor.officer_id }}</td>
+        <td class="small">{{ grant.actions|join:", " }}</td>
+        <td><span class="badge badge--{% if grant.is_currently_active %}active{% else %}locked{% endif %}">{{ grant.effective_status }}</span>
+            {% if grant.expires_at %}<div class="small muted">until {{ grant.expires_at|date:"d M Y" }}</div>{% endif %}</td>
+        <td class="nowrap">
+          {% if can_manage_access and grant.is_currently_active %}
+            <form method="post" action="{% url 'general:revoke_grant' grant.pk %}">
+              {% csrf_token %}
+              <input type="text" name="reason" placeholder="Reason" maxlength="255" class="small">
+              <button type="submit" class="btn btn--sm btn--danger">Revoke</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if can_manage_access %}
+<div class="panel">
+  <div class="panel__head"><h3>Access requests</h3></div>
+  {% if requests %}
+    <table class="table table--compact">
+      <thead><tr><th>Requester</th><th>Requested</th><th>Duration</th><th>Reason</th><th class="nowrap">Decision</th></tr></thead>
+      <tbody>
+      {% for access_request in requests %}
+        <tr>
+          <td>{{ access_request.requester.officer_id }}</td>
+          <td class="small">{{ access_request.actions|join:", " }}</td>
+          <td class="small">{{ access_request.duration_days }} days</td>
+          <td class="small">{{ access_request.reason }}</td>
+          <td class="nowrap">
+            {% if access_request.is_pending %}
+              <form method="post" action="{% url 'general:decide_request' access_request.pk 'approve' %}" class="inline">
+                {% csrf_token %}<button class="btn btn--sm btn--primary">Approve</button>
+              </form>
+              <form method="post" action="{% url 'general:decide_request' access_request.pk 'reject' %}" class="inline">
+                {% csrf_token %}<button class="btn btn--sm btn--ghost">Reject</button>
+              </form>
+            {% else %}
+              <span class="badge badge--{% if access_request.status == 'APPROVED' %}allow{% else %}deny{% endif %}">{{ access_request.status }}</span>
+              <div class="small muted">{{ access_request.decided_by.officer_id|default:"—" }}</div>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No access requests for this case.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

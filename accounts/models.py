@@ -464,6 +464,34 @@ class Officer(AbstractBaseUser, PermissionsMixin):
             actions |= assignment.allowed_actions
         return actions
 
+    # -- Hierarchy ---------------------------------------------------------
+    def descendant_ids(self, include_self: bool = False) -> list:
+        """Officers below this one in the supervisory tree."""
+        if self.pk is None:
+            return []
+        return officer_descendant_ids(self.pk, include_self=include_self)
+
+    def is_supervisor_of(self, other) -> bool:
+        """True when ``other`` sits below this officer in the supervisory tree.
+
+        Rank is irrelevant here: this is the real reporting relationship.
+        """
+        if other is None or self.pk is None or other.pk is None:
+            return False
+        return other.pk in set(self.descendant_ids())
+
+    @property
+    def jurisdiction(self):
+        """The organization (district/state) this officer is posted in."""
+        return self.unit.organization if self.unit_id else None
+
+    def jurisdiction_ids(self, include_self: bool = True) -> list:
+        """Organizations this officer's jurisdiction covers (itself + below)."""
+        org = self.jurisdiction
+        if org is None:
+            return []
+        return organization_descendant_ids(org.pk, include_self=include_self)
+
     @property
     def is_blocked(self) -> bool:
         return self.account_status in C.BLOCKING_STATUSES
@@ -489,6 +517,75 @@ class Officer(AbstractBaseUser, PermissionsMixin):
             ended_at=timezone.now(), end_reason=end_reason, ended_by=actor
         )
         return removed
+
+
+# ---------------------------------------------------------------------------
+# Hierarchy helpers
+#
+# Hierarchical access is derived from *actual relationships* — the supervisory
+# tree and the organization/unit trees — never from rank or designation. Rank
+# is descriptive; a constable who supervises a case is a supervisor of it, and
+# a DSP has no authority over an officer outside their tree.
+#
+# Everything below resolves a whole subtree with a single query and is
+# cycle-safe, so a bad ``supervisor`` link can never hang a request.
+# ---------------------------------------------------------------------------
+def _child_map(model, parent_field: str) -> dict:
+    """Map parent pk -> [child pk] for a self-referential tree, in one query."""
+    children: dict = {}
+    for pk, parent_pk in model.objects.values_list("pk", parent_field):
+        if parent_pk is not None:
+            children.setdefault(parent_pk, []).append(pk)
+    return children
+
+
+def _descendants(children: dict, root_pk) -> list:
+    """Breadth-first walk of a child map, tolerating cycles."""
+    seen = {root_pk}
+    stack = [root_pk]
+    found = []
+    while stack:
+        current = stack.pop()
+        for child in children.get(current, ()):
+            if child in seen:
+                continue
+            seen.add(child)
+            found.append(child)
+            stack.append(child)
+    return found
+
+
+def officer_descendant_ids(officer_pk, include_self: bool = False) -> list:
+    """Officers below ``officer_pk`` in the supervisory tree."""
+    from django.apps import apps
+
+    model = apps.get_model("accounts", "Officer")
+    found = _descendants(_child_map(model, "supervisor_id"), officer_pk)
+    if include_self:
+        found.append(officer_pk)
+    return found
+
+
+def organization_descendant_ids(organization_pk, include_self: bool = True) -> list:
+    """Jurisdictions below ``organization_pk`` (districts under a state, ...)."""
+    from django.apps import apps
+
+    model = apps.get_model("accounts", "Organization")
+    found = _descendants(_child_map(model, "parent_id"), organization_pk)
+    if include_self:
+        found.append(organization_pk)
+    return found
+
+
+def unit_descendant_ids(unit_pk, include_self: bool = True) -> list:
+    """Units below ``unit_pk``."""
+    from django.apps import apps
+
+    model = apps.get_model("accounts", "OrganizationUnit")
+    found = _descendants(_child_map(model, "parent_id"), unit_pk)
+    if include_self:
+        found.append(unit_pk)
+    return found
 
 
 # ---------------------------------------------------------------------------

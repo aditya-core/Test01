@@ -1,0 +1,76 @@
+{% extends "portal/base.html" %}
+{% block title %}Grant Access{% endblock %}
+{% block portal_label %}General Officer Portal{% endblock %}
+{% block portal_name %}General Portal{% endblock %}
+
+{% block nav %}
+<div class="nav-section">Workspace</div>
+<a href="{% url 'general:view_cases' %}">View Cases</a>
+<div class="nav-section">Account</div>
+<a href="{% url 'account_profile' %}">My Account</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'general:case_access' case.case_id %}">Access Management</a> / Grant Access</div>
+    <h2>Grant Access</h2>
+    <p class="muted small">Case {{ case.case_id }} — {{ case.title }}</p>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost" href="{% url 'general:case_access' case.case_id %}">Cancel</a>
+  </div>
+</div>
+
+<div class="panel">
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="field">
+      <label>Recipient</label>
+      <p class="muted small">Choose an officer or a department — not both.</p>
+      {{ form.recipient_officer }}
+      {% for e in form.recipient_officer.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      {{ form.recipient_department }}
+      {% for e in form.recipient_department.errors %}<div class="error">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label>Scope</label>
+      {{ form.scope }}
+      {% for e in form.scope.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      <p class="muted small">Station and jurisdiction scopes are only available to the case owner or a supervising officer.</p>
+    </div>
+
+    <div class="field">
+      <label>Permissions</label>
+      {% if grantable_actions %}
+        <div class="checkbox-grid">{{ form.actions }}</div>
+      {% else %}
+        <p class="muted">You cannot delegate any permission on this case.</p>
+      {% endif %}
+      {% for e in form.actions.errors %}<div class="error">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label for="{{ form.duration_days.id_for_label }}">Duration (days)</label>
+        {{ form.duration_days }}
+        {% for e in form.duration_days.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="{{ form.reason.id_for_label }}">Reason <span class="req">*</span></label>
+      {{ form.reason }}
+      {% for e in form.reason.errors %}<div class="error">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn btn--primary">Grant Access</button>
+      <a class="btn btn--ghost" href="{% url 'general:case_access' case.case_id %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

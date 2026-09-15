@@ -83,6 +83,14 @@ class BaseAuthTestCase(TestCase):
         cls.unit_b = OrganizationUnit.objects.get_or_create(
             organization=cls.org_b, name="Investigation Unit B", defaults={"kind": C.UNIT_KIND_INVESTIGATION}
         )[0]
+        # Police stations, so hierarchical / station-scoped access can be
+        # exercised the way the directive describes (District -> Station).
+        cls.unit_station_x = OrganizationUnit.objects.get_or_create(
+            organization=cls.org_a, name="Station X", defaults={"kind": C.UNIT_KIND_STATION}
+        )[0]
+        cls.unit_station_y = OrganizationUnit.objects.get_or_create(
+            organization=cls.org_a, name="Station Y", defaults={"kind": C.UNIT_KIND_STATION}
+        )[0]
 
     @classmethod
     def _build_portals(cls):
@@ -103,7 +111,8 @@ class BaseAuthTestCase(TestCase):
             C.PERM_OFFICER_VIEW, C.PERM_OFFICER_MANAGE,
             C.PERM_SECURITY_VIEW_EVENTS, C.PERM_AUDIT_VIEW, C.PERM_ACCOUNT_MANAGE_SECURITY,
             C.PERM_CASE_VIEW, C.PERM_CASE_CREATE, C.PERM_CASE_EDIT, C.PERM_CASE_ASSIGN,
-            C.PERM_CASE_UPLOAD_EVIDENCE, C.PERM_CASE_DOWNLOAD,
+            C.PERM_CASE_UPLOAD, C.PERM_CASE_DOWNLOAD,
+            C.PERM_CASE_SHARE, C.PERM_CASE_COMMENT, C.PERM_CASE_MANAGE_ACCESS,
             "case.review", "case.approve",
             "document.view", "document.upload", "document.download",
         ]
@@ -123,14 +132,16 @@ class BaseAuthTestCase(TestCase):
         cls.field_role = role("FIELD_OFFICER",
                               [cls.perms["document.view"], cls.perms["document.upload"],
                                cls.perms[C.PERM_CASE_VIEW], cls.perms[C.PERM_CASE_CREATE],
-                               cls.perms[C.PERM_CASE_UPLOAD_EVIDENCE],
+                               cls.perms[C.PERM_CASE_UPLOAD],
                                cls.perms[C.PERM_CASE_DOWNLOAD]],
                               [cls.portal_general])
         cls.inspector_role = role("INSPECTOR",
                                   [cls.perms["case.view"], cls.perms["case.assign"],
                                    cls.perms["case.review"], cls.perms["case.approve"],
                                    cls.perms[C.PERM_CASE_CREATE], cls.perms[C.PERM_CASE_EDIT],
-                                   cls.perms[C.PERM_CASE_DOWNLOAD],
+                                   cls.perms[C.PERM_CASE_DOWNLOAD], cls.perms[C.PERM_CASE_UPLOAD],
+                                   cls.perms[C.PERM_CASE_SHARE], cls.perms[C.PERM_CASE_COMMENT],
+                                   cls.perms[C.PERM_CASE_MANAGE_ACCESS],
                                    cls.perms["document.view"]],
                                   [cls.portal_general])
         cls.senior_role = role("SENIOR_OFFICER",
@@ -174,6 +185,26 @@ class BaseAuthTestCase(TestCase):
         cls.invited_officer = make_officer(
             "OFF-503", "invited@example.gov", "Invited Officer", cls.field_role, cls.l1,
             cls.unit_investigation, [C.PORTAL_GENERAL], "CODE-503", status=C.ACCOUNT_STATUS_INVITED, active=False)
+
+        # --- District hierarchy: DSP C supervises Inspector A (Station X) and
+        # --- Inspector B (Station Y). Both stations sit in District A.
+        cls.dsp = make_officer(
+            "OFF-110", "dsp@example.gov", "DSP C", cls.inspector_role, cls.l4,
+            cls.unit_admin, [C.PORTAL_GENERAL], "CODE-110", rank="Senior Officer")
+        cls.inspector_a = make_officer(
+            "OFF-111", "inspa@example.gov", "Inspector A", cls.inspector_role, cls.l3,
+            cls.unit_station_x, [C.PORTAL_GENERAL], "CODE-111", rank="Inspector")
+        cls.inspector_b = make_officer(
+            "OFF-112", "inspb@example.gov", "Inspector B", cls.inspector_role, cls.l3,
+            cls.unit_station_y, [C.PORTAL_GENERAL], "CODE-112", rank="Inspector")
+        for subordinate in (cls.inspector_a, cls.inspector_b):
+            subordinate.supervisor = cls.dsp
+            subordinate.save(update_fields=["supervisor"])
+
+        # An officer in another district, used for jurisdiction denial tests.
+        cls.district_b_officer = make_officer(
+            "OFF-113", "distb@example.gov", "District B Officer", cls.inspector_role, cls.l4,
+            cls.unit_b, [C.PORTAL_GENERAL], "CODE-113", rank="Inspector")
 
     def setUp(self):
         cache.clear()

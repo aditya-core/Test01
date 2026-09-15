@@ -1,5 +1,11 @@
 # 10 — Case Authorization (operational domain)
 
+> **Superseded in part.** This document describes the original per-case
+> assignment model, which is still in force. The hierarchical layer built on
+> top of it — hierarchy, place-scoped grants, requests, transfer and protected
+> document delivery — is documented in
+> [`11-hierarchical-case-access.md`](11-hierarchical-case-access.md).
+
 ## 1. The problem
 
 Authentication and *administrative* authorization were already solved. Cases
@@ -94,6 +100,7 @@ Every byte therefore goes through an authorized view:
 ```
 GET /general/cases/<case id>/fir/              -> download_fir
 GET /general/cases/<case id>/evidence/<pk>/    -> download_evidence
+GET /general/cases/<case id>/documents/<pk>/   -> download_document
 ```
 
 Both call `can_access_case(user, case, "download")`, audit the grant
@@ -118,8 +125,9 @@ request context — and land in the same tamper-evident hash chain.
 
 ## 7. Deliberate non-goals
 
-* **No case assignment UI yet.** Rows are created on registration; assigning an
-  existing case to another officer is the next feature.
+* **Case assignment UI: delivered.** `cases/<case id>/access/` (grant, revoke,
+  request, decide) is backed by `AccessGrant` / `AccessRequest` and the same
+  engine — see [`11`](11-hierarchical-case-access.md) §5–§6.
 * **No case-scoped admin.** IT administrators cannot grant case access — by
   design, not by omission.
 * **No classification downgrade path.** Changing a case's sensitivity is an

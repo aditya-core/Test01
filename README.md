@@ -38,6 +38,9 @@ Open `http://localhost:8000/`.
 |---|---|---|---|
 | General (field officer) | `OFF-101` | `ChangeMe!123` | `CODE-101` |
 | General (inspector) | `OFF-102` | `ChangeMe!123` | `CODE-102` |
+| DSP C — supervises both inspectors | `OFF-110` | `ChangeMe!123` | `CODE-110` |
+| Inspector A — Station X | `OFF-111` | `ChangeMe!123` | `CODE-111` |
+| Inspector B — Station Y | `OFF-112` | `ChangeMe!123` | `CODE-112` |
 | Classified | `OFF-201` | `ChangeMe!123` | `CODE-201` |
 | IT / Admin (identity & administration bundle) | `OFF-301` | `ChangeMe!123` | `CODE-301` |
 | Security admin (security ops, reviews, approvals, audit) | `OFF-302` | `ChangeMe!123` | `CODE-302` |
@@ -94,20 +97,38 @@ registries and back-fill the audit hash chain) followed by an optional
 
 `/general/` registers investigation cases with an FIR and evidence files.
 
-Case access is **operational** authorization, decided entirely by
-`AuthorizationService.can_access_case()` — never by filtering in a template:
+**One central database holds every case and document; access is decided
+dynamically** from identity, hierarchy, jurisdiction, role, clearance,
+assignment and explicit delegation — all by a single engine,
+`AuthorizationService.authorize_resource()`:
 
 ```
-ACTIVE + clearance >= case classification + same jurisdiction
-       + active CaseAssignment + required case.* capability
-       + action within the assignment's ceiling  =  ALLOW
+identity -> portal -> policy -> action -> clearance -> jurisdiction
+         -> access path (ownership | hierarchy | assignment | grant)
+         -> capability -> action ceiling   =   ALLOW
 ```
 
-Registering a case creates an `OWNER` `CaseAssignment`, so the registering
-officer is authorized through the same path as everyone else. FIR and evidence
-files are streamed by authorized views (`/general/cases/<id>/fir/`), never by
-media URL. Everything is audited, denials included.
-Details: [`docs/10-case-authorization.md`](docs/10-case-authorization.md).
+Anything else — including a failure at any stage — is a `DENY` with a reason and
+an audit event. Clearance, jurisdiction and account state are evaluated
+*before* any grant, so **a grant can widen access but never bypass a
+restriction**. Hierarchy comes from the real reporting line
+(`Officer.supervisor`, `OrganizationUnit.parent`) — rank and designation are
+display metadata only, and seniority without a reporting link grants nothing.
+
+What that buys you in the UI:
+
+| Need | Where |
+|---|---|
+| Register a case (FIR + evidence) | `cases/register/` — creates an `OWNER` assignment |
+| Browse only what you may open | `cases/` — narrowed in SQL, then re-decided row by row |
+| Open one case | `cases/<id>/` |
+| Delegate / revoke access | `cases/<id>/access/` — officer, department, station or jurisdiction, optionally time-bounded |
+| Ask for access you lack | `cases/<id>/access/request/`, decided at `access-requests/` (never by the requester) |
+| Move a case to another station | `cases/<id>/transfer/` — access follows the case |
+| Download FIR / evidence / document | authorized views only; no reachable raw media URL |
+
+Details: [`docs/10-case-authorization.md`](docs/10-case-authorization.md) and
+[`docs/11-hierarchical-case-access.md`](docs/11-hierarchical-case-access.md).
 
 ## Tests
 
@@ -115,6 +136,7 @@ Details: [`docs/10-case-authorization.md`](docs/10-case-authorization.md).
 python manage.py test              # full suite (accounts, audit, it_admin, general)
 python manage.py test it_admin     # IT / Admin portal feature tests
 python manage.py test general      # case authorization (deny-by-default) tests
+python manage.py test general.tests_access   # hierarchical / grant / file-access matrix
 ```
 
 Covers: valid login, invalid password / Officer ID / secret code, locked /

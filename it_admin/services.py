@@ -217,12 +217,34 @@ class TransferService:
                 request=request,
             )
             if plan.authorization_review_required:
+                # Access that derived from *where* the officer was posted must
+                # not silently follow them (directive §22). Place-scoped
+                # (station / jurisdiction) grants are revoked here; explicit
+                # officer-to-case grants survive — they were a deliberate
+                # delegation — and are covered by the review raised below.
+                self._revoke_place_scoped_access(officer, actor, plan.reason, request)
                 # Do not touch role / clearance / portal grants here. Raise a
                 # review so an authorized reviewer decides in the proper domain.
                 access_review_service.ensure_pending(
                     officer, trigger="Transfer changed organizational unit", created_by=actor, request=request,
                 )
         return history
+
+    @staticmethod
+    def _revoke_place_scoped_access(officer, actor, reason, request) -> int:
+        """Revoke station/jurisdiction access grants after a move (§22).
+
+        Resolved lazily: ``accounts``/``it_admin`` must not import the
+        operational app at module level, and identity administration still
+        works if the cases app is absent.
+        """
+        try:
+            from general.services import access_grant_service
+        except Exception:
+            return 0
+        return access_grant_service.revoke_place_scopes_on_transfer(
+            officer, actor=actor, reason=reason or "Officer transferred", request=request
+        )
 
 
 transfer_service = TransferService()

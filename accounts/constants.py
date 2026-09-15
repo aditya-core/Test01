@@ -170,46 +170,92 @@ AUDITOR_CAPABILITIES = (
 )
 
 # ---------------------------------------------------------------------------
-# Operational (case) authorization
+# Operational (case / document / evidence) authorization
 # ---------------------------------------------------------------------------
-# Case authorization is an OPERATIONAL decision. This vocabulary lives in the
-# identity authority so the engine can evaluate it, but it is granted by the
-# operational domain (case assignment), never by IT administration —
-# ``is_admin_capability`` deliberately excludes these prefixes.
+# Operational authorization is *evaluated* by the central engine but granted by
+# the operational domain — never by IT administration. ``is_admin_capability``
+# deliberately excludes the ``case.`` prefix so the IT portal can neither grant
+# nor explain these.
+
+# --- Resource types ---------------------------------------------------------
+RESOURCE_CASE = "case"
+RESOURCE_DOCUMENT = "document"
+RESOURCE_FIR = "fir"
+RESOURCE_EVIDENCE = "evidence"
+
+RESOURCE_TYPE_CHOICES = (
+    (RESOURCE_CASE, "Case"),
+    (RESOURCE_DOCUMENT, "Document"),
+    (RESOURCE_FIR, "FIR"),
+    (RESOURCE_EVIDENCE, "Evidence"),
+)
+
+# --- Actions ----------------------------------------------------------------
+# Access is never a boolean: every request names an action.
+ACTION_VIEW = "view"
+ACTION_DOWNLOAD = "download"
+ACTION_UPLOAD = "upload"
+ACTION_EDIT = "edit"
+ACTION_SHARE = "share"
+ACTION_COMMENT = "comment"
+ACTION_APPROVE = "approve"
+ACTION_MANAGE_ACCESS = "manage_access"
+ACTION_ASSIGN = "assign"
+
+CASE_ACTIONS = frozenset({
+    ACTION_VIEW,
+    ACTION_DOWNLOAD,
+    ACTION_UPLOAD,
+    ACTION_EDIT,
+    ACTION_SHARE,
+    ACTION_COMMENT,
+    ACTION_APPROVE,
+    ACTION_MANAGE_ACCESS,
+    ACTION_ASSIGN,
+})
+
+# What a *file* resource (FIR / evidence / document) can be asked for.
+FILE_ACTIONS = frozenset({ACTION_VIEW, ACTION_DOWNLOAD, ACTION_SHARE})
+
+ACTION_LABELS = {
+    ACTION_VIEW: "View",
+    ACTION_DOWNLOAD: "Download",
+    ACTION_UPLOAD: "Upload",
+    ACTION_EDIT: "Edit",
+    ACTION_SHARE: "Share",
+    ACTION_COMMENT: "Comment",
+    ACTION_APPROVE: "Approve",
+    ACTION_MANAGE_ACCESS: "Manage access",
+    ACTION_ASSIGN: "Assign officers",
+}
+
+# --- Capabilities ------------------------------------------------------------
 PERM_CASE_VIEW = "case.view"
 PERM_CASE_CREATE = "case.create"
 PERM_CASE_EDIT = "case.edit"
 PERM_CASE_ASSIGN = "case.assign"
-PERM_CASE_UPLOAD_EVIDENCE = "case.upload_evidence"
+PERM_CASE_UPLOAD = "case.upload"
 PERM_CASE_DOWNLOAD = "case.download"
+PERM_CASE_SHARE = "case.share"
+PERM_CASE_COMMENT = "case.comment"
+PERM_CASE_APPROVE = "case.approve"
+PERM_CASE_MANAGE_ACCESS = "case.manage_access"
 
-# The action vocabulary a case resource understands. ``allowed_actions`` on a
-# resource is a *ceiling*: the assignment row decides what an individual
-# officer may actually do inside it.
-ACTION_CASE_VIEW = "view"
-ACTION_CASE_EDIT = "edit"
-ACTION_CASE_UPLOAD_EVIDENCE = "upload_evidence"
-ACTION_CASE_DOWNLOAD = "download"
-ACTION_CASE_ASSIGN = "assign"
-
-CASE_ACTIONS = frozenset({
-    ACTION_CASE_VIEW,
-    ACTION_CASE_EDIT,
-    ACTION_CASE_UPLOAD_EVIDENCE,
-    ACTION_CASE_DOWNLOAD,
-    ACTION_CASE_ASSIGN,
-})
-
-# Action → capability codename an officer must hold to perform it.
+# Action -> capability an officer must hold to perform it. An officer can only
+# exercise actions their role carries; a grant can never invent a capability.
 CASE_ACTION_PERMISSIONS = {
-    ACTION_CASE_VIEW: PERM_CASE_VIEW,
-    ACTION_CASE_EDIT: PERM_CASE_EDIT,
-    ACTION_CASE_UPLOAD_EVIDENCE: PERM_CASE_UPLOAD_EVIDENCE,
-    ACTION_CASE_DOWNLOAD: PERM_CASE_DOWNLOAD,
-    ACTION_CASE_ASSIGN: PERM_CASE_ASSIGN,
+    ACTION_VIEW: PERM_CASE_VIEW,
+    ACTION_DOWNLOAD: PERM_CASE_DOWNLOAD,
+    ACTION_UPLOAD: PERM_CASE_UPLOAD,
+    ACTION_EDIT: PERM_CASE_EDIT,
+    ACTION_SHARE: PERM_CASE_SHARE,
+    ACTION_COMMENT: PERM_CASE_COMMENT,
+    ACTION_APPROVE: PERM_CASE_APPROVE,
+    ACTION_MANAGE_ACCESS: PERM_CASE_MANAGE_ACCESS,
+    ACTION_ASSIGN: PERM_CASE_ASSIGN,
 }
 
-# Case-assignment roles and the ceiling of actions each one confers.
+# --- Case assignment roles ------------------------------------------------------
 ASSIGNMENT_OWNER = "OWNER"
 ASSIGNMENT_INVESTIGATOR = "INVESTIGATOR"
 ASSIGNMENT_SUPERVISOR = "SUPERVISOR"
@@ -218,50 +264,103 @@ ASSIGNMENT_VIEWER = "VIEWER"
 ASSIGNMENT_ROLE_CHOICES = (
     (ASSIGNMENT_OWNER, "Case owner (full control)"),
     (ASSIGNMENT_INVESTIGATOR, "Investigating officer"),
-    (ASSIGNMENT_SUPERVISOR, "Supervising officer (read-only oversight)"),
+    (ASSIGNMENT_SUPERVISOR, "Supervising officer (oversight)"),
     (ASSIGNMENT_VIEWER, "Viewer (read-only)"),
 )
 
 ASSIGNMENT_ROLE_ACTIONS = {
     ASSIGNMENT_OWNER: frozenset(CASE_ACTIONS),
     ASSIGNMENT_INVESTIGATOR: frozenset({
-        ACTION_CASE_VIEW,
-        ACTION_CASE_EDIT,
-        ACTION_CASE_UPLOAD_EVIDENCE,
-        ACTION_CASE_DOWNLOAD,
+        ACTION_VIEW, ACTION_DOWNLOAD, ACTION_UPLOAD, ACTION_EDIT, ACTION_COMMENT,
     }),
-    ASSIGNMENT_SUPERVISOR: frozenset({ACTION_CASE_VIEW, ACTION_CASE_DOWNLOAD}),
-    ASSIGNMENT_VIEWER: frozenset({ACTION_CASE_VIEW}),
+    # A supervising officer inherits oversight *and* the ability to manage who
+    # else may see the case — that is the point of hierarchical authority — but
+    # not the owner's power to assign or edit the investigation itself.
+    ASSIGNMENT_SUPERVISOR: frozenset({
+        ACTION_VIEW, ACTION_DOWNLOAD, ACTION_COMMENT, ACTION_APPROVE,
+        ACTION_MANAGE_ACCESS, ACTION_SHARE,
+    }),
+    ASSIGNMENT_VIEWER: frozenset({ACTION_VIEW}),
 }
 
-# Descriptions used by seed data / data migrations (data, not policy).
+# --- Access grant scopes --------------------------------------------------------
+GRANT_SCOPE_CASE = "CASE"
+GRANT_SCOPE_SELECTED = "SELECTED"
+GRANT_SCOPE_STATION = "STATION"
+GRANT_SCOPE_JURISDICTION = "JURISDICTION"
+
+GRANT_SCOPE_CHOICES = (
+    (GRANT_SCOPE_CASE, "This case"),
+    (GRANT_SCOPE_SELECTED, "Selected cases"),
+    (GRANT_SCOPE_STATION, "Station / unit"),
+    (GRANT_SCOPE_JURISDICTION, "Jurisdiction"),
+)
+
+# Scopes that derive access from a *place* rather than from a named resource.
+# These are re-evaluated when an officer is transferred.
+GRANT_PLACE_SCOPES = frozenset({GRANT_SCOPE_STATION, GRANT_SCOPE_JURISDICTION})
+
+GRANT_STATUS_ACTIVE = "ACTIVE"
+GRANT_STATUS_REVOKED = "REVOKED"
+GRANT_STATUS_CHOICES = (
+    (GRANT_STATUS_ACTIVE, "Active"),
+    (GRANT_STATUS_REVOKED, "Revoked"),
+)
+
+# --- Access requests ------------------------------------------------------------
+REQUEST_PENDING = "PENDING"
+REQUEST_APPROVED = "APPROVED"
+REQUEST_REJECTED = "REJECTED"
+REQUEST_CANCELLED = "CANCELLED"
+REQUEST_STATUS_CHOICES = (
+    (REQUEST_PENDING, "Pending"),
+    (REQUEST_APPROVED, "Approved"),
+    (REQUEST_REJECTED, "Rejected"),
+    (REQUEST_CANCELLED, "Cancelled"),
+)
+
+# --- Seed data ---------------------------------------------------------------------
 OPERATIONAL_CAPABILITY_DESCRIPTIONS = {
     PERM_CASE_VIEW: "View authorized investigation cases.",
     PERM_CASE_CREATE: "Register new investigation cases.",
     PERM_CASE_EDIT: "Edit authorized investigation cases.",
     PERM_CASE_ASSIGN: "Assign officers to authorized cases.",
-    PERM_CASE_UPLOAD_EVIDENCE: "Upload evidence into authorized cases.",
-    PERM_CASE_DOWNLOAD: "Download FIR and evidence from authorized cases.",
+    PERM_CASE_UPLOAD: "Upload evidence and documents into authorized cases.",
+    PERM_CASE_DOWNLOAD: "Download FIR, evidence and documents from authorized cases.",
+    PERM_CASE_SHARE: "Share authorized case material with other officers.",
+    PERM_CASE_COMMENT: "Comment on authorized cases.",
+    PERM_CASE_APPROVE: "Approve actions on authorized cases.",
+    PERM_CASE_MANAGE_ACCESS: "Grant, revoke and decide access to authorized cases.",
 }
 
-# Operational (case) capabilities granted to each seeded operational role.
-# Data, not policy — editable per installation. The IT-administration roles are
-# deliberately absent: administering accounts never grants case access.
+# Operational capabilities granted to each seeded operational role (data, not
+# policy). IT-administration roles are deliberately absent: administering
+# accounts never grants investigation access (see docs/07 separation of duties).
 ROLE_OPERATIONAL_CAPABILITIES = {
     "FIELD_OFFICER": (
-        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD,
+        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_UPLOAD, PERM_CASE_DOWNLOAD,
+        PERM_CASE_COMMENT,
     ),
     "INVESTIGATING_OFFICER": (
-        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_EDIT,
-        PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD,
+        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_EDIT, PERM_CASE_UPLOAD,
+        PERM_CASE_DOWNLOAD, PERM_CASE_COMMENT, PERM_CASE_MANAGE_ACCESS,
     ),
-    "FORENSIC_OFFICER": (PERM_CASE_VIEW, PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD),
+    "FORENSIC_OFFICER": (
+        PERM_CASE_VIEW, PERM_CASE_UPLOAD, PERM_CASE_DOWNLOAD, PERM_CASE_COMMENT,
+    ),
     "INSPECTOR": (
         PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_EDIT, PERM_CASE_ASSIGN,
-        PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD,
+        PERM_CASE_UPLOAD, PERM_CASE_DOWNLOAD, PERM_CASE_SHARE, PERM_CASE_COMMENT,
+        PERM_CASE_APPROVE, PERM_CASE_MANAGE_ACCESS,
     ),
-    "SENIOR_OFFICER": (PERM_CASE_VIEW, PERM_CASE_ASSIGN, PERM_CASE_DOWNLOAD),
-    "COMMISSIONER": (PERM_CASE_VIEW, PERM_CASE_ASSIGN, PERM_CASE_DOWNLOAD),
+    "SENIOR_OFFICER": (
+        PERM_CASE_VIEW, PERM_CASE_ASSIGN, PERM_CASE_DOWNLOAD, PERM_CASE_SHARE,
+        PERM_CASE_COMMENT, PERM_CASE_APPROVE, PERM_CASE_MANAGE_ACCESS,
+    ),
+    "COMMISSIONER": (
+        PERM_CASE_VIEW, PERM_CASE_ASSIGN, PERM_CASE_DOWNLOAD, PERM_CASE_SHARE,
+        PERM_CASE_COMMENT, PERM_CASE_APPROVE, PERM_CASE_MANAGE_ACCESS,
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -295,6 +394,7 @@ UNIT_KIND_INVESTIGATION = "INVESTIGATION"
 UNIT_KIND_CYBER = "CYBER"
 UNIT_KIND_FORENSIC = "FORENSIC"
 UNIT_KIND_ADMIN = "ADMINISTRATION"
+UNIT_KIND_STATION = "POLICE_STATION"
 
 UNIT_KIND_CHOICES = (
     (UNIT_KIND_HQ, "Headquarters"),
@@ -302,6 +402,7 @@ UNIT_KIND_CHOICES = (
     (UNIT_KIND_CYBER, "Cyber Unit"),
     (UNIT_KIND_FORENSIC, "Forensic Unit"),
     (UNIT_KIND_ADMIN, "Administration Unit"),
+    (UNIT_KIND_STATION, "Police Station"),
 )
 
 # ---------------------------------------------------------------------------
@@ -368,10 +469,23 @@ EVENT_AUDIT_CHAIN_VERIFIED = "AUDIT_CHAIN_VERIFIED"
 
 # Operational (case) authorization events.
 EVENT_CASE_REGISTERED = "CASE_REGISTERED"
-EVENT_CASE_ACCESS_GRANTED = "CASE_ACCESS_GRANTED"
-EVENT_CASE_ACCESS_REVOKED = "CASE_ACCESS_REVOKED"
+EVENT_CASE_VIEWED = "CASE_VIEWED"
+EVENT_CASE_TRANSFERRED = "CASE_TRANSFERRED"
 EVENT_CASE_ACCESS_DENIED = "CASE_ACCESS_DENIED"
 EVENT_CASE_DOCUMENT_DOWNLOAD = "CASE_DOCUMENT_DOWNLOAD"
+EVENT_FILE_VIEW = "FILE_VIEW"
+EVENT_FILE_DOWNLOAD = "FILE_DOWNLOAD"
+EVENT_FILE_ACCESS_DENIED = "FILE_ACCESS_DENIED"
+
+# Explicit access delegation (AccessGrant / AccessRequest).
+EVENT_ACCESS_GRANT_CREATED = "ACCESS_GRANT_CREATED"
+EVENT_ACCESS_GRANT_REVOKED = "ACCESS_GRANT_REVOKED"
+EVENT_ACCESS_GRANT_EXPIRED = "ACCESS_GRANT_EXPIRED"
+EVENT_BROAD_ACCESS_GRANTED = "BROAD_ACCESS_GRANTED"
+EVENT_ACCESS_REQUEST_CREATED = "ACCESS_REQUEST_CREATED"
+EVENT_ACCESS_REQUEST_APPROVED = "ACCESS_REQUEST_APPROVED"
+EVENT_ACCESS_REQUEST_REJECTED = "ACCESS_REQUEST_REJECTED"
+EVENT_ACCESS_REQUEST_CANCELLED = "ACCESS_REQUEST_CANCELLED"
 
 # Event types that make up an officer's administrative timeline / the
 # dashboard's "recent administrative activity". Login noise is excluded.

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from accounts import constants as C
 from accounts.models import (
@@ -41,6 +42,7 @@ class Command(BaseCommand):
         self._seed_portals()
         self._seed_roles()
         self._seed_officers()
+        self._seed_cases(**options)
         self.stdout.write(self.style.SUCCESS("Demo data seeded."))
 
     # -- permissions ---------------------------------------------------------
@@ -129,6 +131,12 @@ class Command(BaseCommand):
             ("Cyber Unit", C.UNIT_KIND_CYBER, "Cyber Crime"),
             ("Forensic Unit", C.UNIT_KIND_FORENSIC, "Forensics"),
             ("Administration Unit", C.UNIT_KIND_ADMIN, "Administration"),
+        ]
+        # Police stations, so the District -> Station -> Officer hierarchy the
+        # access model is built around exists out of the box.
+        unit_specs = unit_specs + [
+            ("Station X", C.UNIT_KIND_STATION, "Investigation"),
+            ("Station Y", C.UNIT_KIND_STATION, "Investigation"),
         ]
         for name, kind, dept in unit_specs:
             unit, _ = OrganizationUnit.objects.get_or_create(
@@ -336,3 +344,66 @@ class Command(BaseCommand):
         make("OFF-999", "pending.officer@example.gov", "Pending Officer", "FIELD_OFFICER",
              "L1", "Investigation Unit", [C.PORTAL_GENERAL], "CODE-999",
              rank="Constable", active=False)
+
+        # District hierarchy example: DSP C supervises Inspector A (Station X)
+        # and Inspector B (Station Y). Both stations sit in District A.
+        dsp = make("OFF-110", "dsp.c@example.gov", "DSP C", "SENIOR_OFFICER",
+                   "L4", "Administration Unit", [C.PORTAL_GENERAL], "CODE-110",
+                   rank="Senior Officer")
+        inspector_a = make("OFF-111", "inspector.a@example.gov", "Inspector A", "INSPECTOR",
+                           "L3", "Station X", [C.PORTAL_GENERAL], "CODE-111", rank="Inspector")
+        inspector_b = make("OFF-112", "inspector.b@example.gov", "Inspector B", "INSPECTOR",
+                           "L3", "Station Y", [C.PORTAL_GENERAL], "CODE-112", rank="Inspector")
+        for subordinate in (inspector_a, inspector_b):
+            if subordinate.supervisor_id != dsp.pk:
+                subordinate.supervisor = dsp
+                subordinate.save(update_fields=["supervisor"])
+
+    def _seed_cases(self, **options):
+        """A few cases so hierarchical access is observable in the UI.
+
+        Lazy import on purpose: ``accounts`` has no import-time dependency on
+        the cases app, and seeding still succeeds if it is not installed.
+
+        The three cases belong to Inspector A (Station X), Inspector B
+        (Station Y) and Field Officer One, which is enough to demonstrate the
+        rules end to end: each officer sees their own, neither inspector sees
+        the other's, and DSP C -- their supervisor -- sees both.
+        """
+        try:
+            from general.models import CaseRecord
+        except Exception:  # pragma: no cover - cases app not installed
+            return
+
+        clearances = {c.code: c for c in ClearanceLevel.objects.all()}
+        general_clearance = clearances.get("L1") or next(iter(clearances.values()), None)
+        specs = [
+            ("OFF-111", "Station X robbery -- Main Bazar", "Robbery",
+             "Armed robbery at the Main Bazar jewellery shop; CCTV seized."),
+            ("OFF-112", "Station Y vehicle theft -- NH-19", "Theft",
+             "Motorcycle lifted from the NH-19 toll plaza parking."),
+            ("OFF-101", "Cyber fraud -- District A", "Cyber Fraud",
+             "Phishing of a district vendor account; bank trail requested."),
+        ]
+        verbosity = options.get("verbosity", 1)
+        for officer_id, title, case_type, summary in specs:
+            try:
+                creator = Officer.objects.get(officer_id=officer_id)
+            except Officer.DoesNotExist:
+                continue
+            case, created = CaseRecord.objects.get_or_create(
+                title=title,
+                defaults={
+                    "case_type": case_type,
+                    "summary": summary,
+                    "incident_date": timezone.now().date(),
+                    "location": "District A",
+                    "created_by": creator,
+                    "organization": creator.unit.organization,
+                    "unit": creator.unit,
+                    "police_station": creator.unit.name,
+                    "classification": general_clearance,
+                },
+            )
+            if created and options.get("verbosity", 1) >= 2:
+                self.stdout.write(f"  seeded case {case.case_id} ({title})")
