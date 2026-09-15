@@ -33,7 +33,7 @@
   {% if cases %}
     <div class="case-folder-grid case-folder-grid--full">
       {% for case in cases %}
-        <button type="button" class="case-folder case-folder--detail" data-case-id="{{ case.case_id }}" data-case-title="{{ case.title|escapejs }}" data-case-type="{{ case.case_type|escapejs }}" data-case-status="{{ case.status|escapejs }}" data-case-agency="{{ case.investigating_agency|default:'—'|escapejs }}" data-case-station="{{ case.police_station|default:'—'|escapejs }}" data-case-location="{{ case.location|default:'—'|escapejs }}" data-case-date="{{ case.incident_date|date:'d M Y' }}" data-case-summary="{{ case.summary|default:'No summary provided.'|escapejs }}" data-case-complainant="{{ case.complainant_name|default:'—'|escapejs }}" data-case-contact="{{ case.complainant_contact|default:'—'|escapejs }}" data-case-created="{{ case.created_at|date:'d M Y' }}" data-case-updated="{{ case.updated_at|date:'d M Y' }}" data-case-fir="{% if case.fir_document %}{{ case.fir_document.url }}{% endif %}">
+        <button type="button" class="case-folder case-folder--detail" data-case-id="{{ case.case_id }}" data-case-title="{{ case.title|escapejs }}" data-case-type="{{ case.case_type|escapejs }}" data-case-status="{{ case.status|escapejs }}" data-case-agency="{{ case.investigating_agency|default:'—'|escapejs }}" data-case-station="{{ case.police_station|default:'—'|escapejs }}" data-case-location="{{ case.location|default:'—'|escapejs }}" data-case-date="{{ case.incident_date|date:'d M Y' }}" data-case-summary="{{ case.summary|default:'No summary provided.'|escapejs }}" data-case-complainant="{{ case.complainant_name|default:'—'|escapejs }}" data-case-contact="{{ case.complainant_contact|default:'—'|escapejs }}" data-case-created="{{ case.created_at|date:'d M Y' }}" data-case-updated="{{ case.updated_at|date:'d M Y' }}" data-case-fir="{% if case.fir_document %}{{ case.fir_document.url }}{% endif %}" data-case-evidence="{% for evidence in case.evidence_files.all %}{{ evidence.file.url|escapejs }}||{{ evidence.file.name|escapejs }}{% if not forloop.last %};;{% endif %}{% endfor %}">
           <div class="case-folder__icon">📁</div>
           <div class="case-folder__meta">
             <div class="case-folder__id">{{ case.case_id }}</div>
@@ -112,17 +112,143 @@
 
     <div class="case-modal__actions">
       <a id="case-fir-download" href="#" target="_blank" rel="noopener" class="btn btn--primary">Download FIR</a>
-      <button type="button" class="btn btn--ghost" onclick="window.print()">Save as PDF</button>
+      <button type="button" id="case-send-copy" class="btn btn--ghost">Send a copy</button>
+      <button type="button" id="case-download-evidence" class="btn btn--ghost">Download evidence</button>
+      <button type="button" id="case-download-record" class="btn btn--ghost">Download all case record</button>
       <button type="button" class="btn btn--ghost" data-close="modal">Close</button>
     </div>
   </div>
 </div>
 
+<div id="send-copy-modal" class="case-modal" aria-hidden="true">
+  <div class="case-modal__backdrop" data-close="send-copy"></div>
+  <div class="case-modal__dialog case-modal__dialog--compact" role="dialog" aria-modal="true" aria-labelledby="send-copy-title">
+    <div class="case-modal__header">
+      <div>
+        <div class="crumbs">Case record</div>
+        <h3 id="send-copy-title">Send a copy</h3>
+      </div>
+      <button type="button" class="case-modal__close" data-close="send-copy" aria-label="Close send copy dialog">×</button>
+    </div>
+    <form id="send-copy-form">
+      <p class="muted">Your device mail app will open with the case details prepared.</p>
+      <div class="field">
+        <label for="send-copy-email">Recipient email</label>
+        <input id="send-copy-email" name="email" type="email" autocomplete="email" required placeholder="name@example.com">
+      </div>
+      <div class="case-modal__actions">
+        <button type="submit" class="btn btn--primary">Open mail app</button>
+        <button type="button" class="btn btn--ghost" data-close="send-copy">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="case-action-menu" class="case-action-menu" role="menu" aria-hidden="true">
+  <button type="button" data-case-action="send-copy" role="menuitem">Send a copy</button>
+  <button type="button" data-case-action="download-fir" role="menuitem">Download FIR</button>
+  <button type="button" data-case-action="download-evidence" role="menuitem">Download evidence</button>
+  <button type="button" data-case-action="download-record" role="menuitem">Download all case record</button>
+</div>
+
 <script>
   (function () {
     const modal = document.getElementById('case-detail-modal');
+    const sendCopyModal = document.getElementById('send-copy-modal');
+    const actionMenu = document.getElementById('case-action-menu');
+    const sendCopyForm = document.getElementById('send-copy-form');
+    const sendCopyEmail = document.getElementById('send-copy-email');
     const closeTriggers = document.querySelectorAll('[data-close="modal"]');
+    const sendCopyCloseTriggers = document.querySelectorAll('[data-close="send-copy"]');
     const cards = document.querySelectorAll('.case-folder--detail');
+    let activeCard = null;
+    let longPressTimer = null;
+
+    // Integration point for future activity monitoring/API delivery.
+    function trackCaseActivity(action, card) {
+      window.dispatchEvent(new CustomEvent('case-activity', { detail: {
+        action: action,
+        caseId: card.dataset.caseId,
+        occurredAt: new Date().toISOString()
+      }}));
+    }
+
+    function parseEvidence(card) {
+      if (!card.dataset.caseEvidence) return [];
+      return card.dataset.caseEvidence.split(';;').filter(Boolean).map(function (item) {
+        const parts = item.split('||');
+        return { url: parts[0], name: parts.slice(1).join('||') || 'evidence' };
+      });
+    }
+
+    function downloadFile(url, name) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name || '';
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    function downloadEvidence(card) {
+      const evidence = parseEvidence(card);
+      if (!evidence.length) return;
+      evidence.forEach(function (item, index) {
+        window.setTimeout(function () { downloadFile(item.url, item.name); }, index * 150);
+      });
+      trackCaseActivity('download_evidence', card);
+    }
+
+    function downloadFir(card) {
+      if (!card.dataset.caseFir) return;
+      downloadFile(card.dataset.caseFir, card.dataset.caseId + '-FIR');
+      trackCaseActivity('download_fir', card);
+    }
+
+    function downloadRecord(card) {
+      openCaseModal(card);
+      window.setTimeout(function () { window.print(); }, 0);
+      trackCaseActivity('download_case_record', card);
+    }
+
+    function openSendCopy(card) {
+      activeCard = card;
+      sendCopyModal.classList.add('is-open');
+      sendCopyModal.setAttribute('aria-hidden', 'false');
+      sendCopyEmail.focus();
+    }
+
+    function closeSendCopy() {
+      sendCopyModal.classList.remove('is-open');
+      sendCopyModal.setAttribute('aria-hidden', 'true');
+      sendCopyForm.reset();
+    }
+
+    function openActionMenu(card, event) {
+      event.preventDefault();
+      activeCard = card;
+      actionMenu.querySelector('[data-case-action="download-evidence"]').disabled = !parseEvidence(card).length;
+      actionMenu.querySelector('[data-case-action="download-fir"]').disabled = !card.dataset.caseFir;
+      actionMenu.style.left = Math.min(event.clientX, window.innerWidth - 250) + 'px';
+      actionMenu.style.top = Math.min(event.clientY, window.innerHeight - 190) + 'px';
+      actionMenu.classList.add('is-open');
+      actionMenu.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeActionMenu() {
+      actionMenu.classList.remove('is-open');
+      actionMenu.setAttribute('aria-hidden', 'true');
+    }
+
+    function runAction(action, card) {
+      closeActionMenu();
+      if (action === 'send-copy') openSendCopy(card);
+      if (action === 'download-fir') downloadFir(card);
+      if (action === 'download-evidence') downloadEvidence(card);
+      if (action === 'download-record') downloadRecord(card);
+    }
 
     function openCaseModal(card) {
       if (!modal) return;
@@ -150,6 +276,12 @@
         firLink.style.display = 'none';
       }
 
+      document.getElementById('case-download-evidence').disabled = !parseEvidence(card).length;
+      document.getElementById('case-fir-download').onclick = function () {
+        if (card.dataset.caseFir) trackCaseActivity('download_fir', card);
+      };
+      activeCard = card;
+
       modal.classList.add('is-open');
       modal.setAttribute('aria-hidden', 'false');
     }
@@ -162,10 +294,50 @@
 
     cards.forEach((card) => {
       card.addEventListener('click', function () { openCaseModal(card); });
+      card.addEventListener('contextmenu', function (event) { openActionMenu(card, event); });
+      card.addEventListener('touchstart', function (event) {
+        longPressTimer = window.setTimeout(function () {
+          const touch = event.touches[0];
+          openActionMenu(card, { clientX: touch.clientX, clientY: touch.clientY, preventDefault: function () { event.preventDefault(); } });
+        }, 550);
+      }, { passive: false });
+      ['touchend', 'touchmove', 'touchcancel'].forEach(function (name) {
+        card.addEventListener(name, function () { window.clearTimeout(longPressTimer); });
+      });
     });
 
     closeTriggers.forEach((trigger) => {
       trigger.addEventListener('click', function () { closeCaseModal(); });
+    });
+
+    sendCopyCloseTriggers.forEach((trigger) => {
+      trigger.addEventListener('click', closeSendCopy);
+    });
+
+    document.querySelectorAll('[data-case-action]').forEach(function (button) {
+      button.addEventListener('click', function () { runAction(button.dataset.caseAction, activeCard); });
+    });
+
+    document.getElementById('case-send-copy').addEventListener('click', function () { openSendCopy(activeCard); });
+    document.getElementById('case-download-evidence').addEventListener('click', function () { downloadEvidence(activeCard); });
+    document.getElementById('case-download-record').addEventListener('click', function () { downloadRecord(activeCard); });
+
+    sendCopyForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!activeCard) return;
+      const recipient = sendCopyEmail.value.trim();
+      const evidenceLinks = parseEvidence(activeCard).map(function (item) { return item.url; });
+      const subject = encodeURIComponent('Case copy: ' + activeCard.dataset.caseId);
+      const body = encodeURIComponent([
+        'Case ID: ' + activeCard.dataset.caseId,
+        'Title: ' + activeCard.dataset.caseTitle,
+        '',
+        'FIR: ' + (activeCard.dataset.caseFir || 'Not available'),
+        'Evidence files: ' + (evidenceLinks.join(', ') || 'None')
+      ].join('\n'));
+      trackCaseActivity('send_copy', activeCard);
+      closeSendCopy();
+      window.location.href = 'mailto:' + encodeURIComponent(recipient) + '?subject=' + subject + '&body=' + body;
     });
 
     modal.addEventListener('click', function (event) {
@@ -178,6 +350,14 @@
       if (event.key === 'Escape' && modal && modal.classList.contains('is-open')) {
         closeCaseModal();
       }
+      if (event.key === 'Escape') {
+        closeActionMenu();
+        if (sendCopyModal.classList.contains('is-open')) closeSendCopy();
+      }
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!actionMenu.contains(event.target) && !event.target.closest('.case-folder--detail')) closeActionMenu();
     });
   })();
 </script>
