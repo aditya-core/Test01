@@ -58,6 +58,19 @@ CSRF_TRUSTED_ORIGINS = [
     if h.strip()
 ]
 
+# Reverse-proxy / live-preview hosts terminate TLS and forward plain HTTP, so
+# the browser sends ``Origin: https://<host>`` while Django computes
+# ``http://<host>`` and rejects the CSRF origin check. Trusting the preview
+# domain restores it. A ``*`` entry matches all subdomains (see
+# ``CsrfViewMiddleware.allowed_origin_subdomains``).
+#
+# Gated on DEBUG: a production deployment runs with DEBUG=False and therefore
+# never trusts these origins.
+if DEBUG and _env_bool("DJANGO_TRUST_PREVIEW_ORIGINS", True):
+    for preview_origin in ("https://*.e2b.app",):
+        if preview_origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(preview_origin)
+
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
