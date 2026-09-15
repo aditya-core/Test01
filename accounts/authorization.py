@@ -351,6 +351,52 @@ class AuthorizationService:
         return self.authorize(user, action=action, resource=resource, portal=portal)
 
     # ------------------------------------------------------------------ #
+    # Case authorization (operational domain)
+    # ------------------------------------------------------------------ #
+    def case_actions(self, user, case) -> frozenset:
+        """The actions ``user`` may perform on ``case``, from their assignment.
+
+        Resolved through the ``case_actions_for`` hook so the operational
+        domain keeps ownership of the data. Fail closed if the hook is absent
+        or raises.
+        """
+        resolver = getattr(user, "case_actions_for", None)
+        if not callable(resolver):
+            return frozenset()
+        try:
+            actions = resolver(case)
+        except Exception:
+            return frozenset()
+        return frozenset(a for a in actions if a in C.CASE_ACTIONS)
+
+    def can_access_case(self, user, case, action: str = C.ACTION_CASE_VIEW) -> bool:
+        """Operational case authorization — every layer must pass:
+
+        1. classification — officer clearance >= case classification,
+        2. organizational scope — officer is posted in the case jurisdiction,
+        3. case assignment — an explicit, active grant (deny by default),
+        4. action capability — the ``case.*`` permission the action requires,
+        5. action ceiling — what the officer's assignment role allows.
+
+        Any failure denies. Steps 1–3 are evaluated by the generic engine via
+        the resource protocol (``case.security_requirement``); 4 and 5 are
+        per-officer and resolved here.
+        """
+        if not self._is_active_identity(user):
+            return False
+        if not action:
+            return False
+        requirement = getattr(case, "security_requirement", None)
+        if requirement is None:
+            return False
+        if not self.authorize(user, action=action, requirement=requirement):
+            return False
+        needed = C.CASE_ACTION_PERMISSIONS.get(action)
+        if needed and not self.has_permission(user, needed):
+            return False
+        return action in self.case_actions(user, case)
+
+    # ------------------------------------------------------------------ #
     # Internals
     # ------------------------------------------------------------------ #
     def _is_active_identity(self, user) -> bool:

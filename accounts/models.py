@@ -431,6 +431,39 @@ class Officer(AbstractBaseUser, PermissionsMixin):
             portal__key=portal_key, revoked_at__isnull=True
         ).exists()
 
+    # -- Operational (case) authorization hooks -----------------------------
+    # ``accounts`` is the authority that *evaluates* case authorization, but the
+    # operational domain owns the data. These hooks are resolved through the
+    # app registry so the dependency direction (portals → accounts) is never
+    # inverted, and both fail closed when the cases app is absent.
+    @staticmethod
+    def _case_assignment_model():
+        from django.apps import apps
+
+        try:
+            return apps.get_model("general", "CaseAssignment")
+        except LookupError:
+            return None
+
+    def is_assigned_to_case(self, case_id: str) -> bool:
+        """True when this officer holds an active assignment on ``case_id``."""
+        model = self._case_assignment_model()
+        if model is None or not case_id:
+            return False
+        return model.objects.filter(
+            case__case_id=case_id, officer=self, revoked_at__isnull=True
+        ).exists()
+
+    def case_actions_for(self, case) -> set:
+        """The union of actions every active assignment on ``case`` grants."""
+        model = self._case_assignment_model()
+        if model is None or case is None:
+            return set()
+        actions: set = set()
+        for assignment in model.objects.filter(case=case, officer=self, revoked_at__isnull=True):
+            actions |= assignment.allowed_actions
+        return actions
+
     @property
     def is_blocked(self) -> bool:
         return self.account_status in C.BLOCKING_STATUSES

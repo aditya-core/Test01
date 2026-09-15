@@ -22,8 +22,13 @@ env/
 *.log
 db.sqlite3
 db.sqlite3-journal
+# Uploaded case files (FIR / evidence) live under MEDIA_ROOT = /media/.
+# They are user data, not source — never commit them.
 /media/
 /staticfiles/
+# Legacy location: uploads used to fall back to the working directory because
+# MEDIA_ROOT was unset. Kept ignored so old checkouts never re-add them.
+/cases/
 
 # Secrets — never commit
 .env

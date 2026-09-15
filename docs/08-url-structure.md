@@ -20,6 +20,26 @@
 | `/audit/` | Authorized audit interface (shared) |
 | `/security/` | Authorized security functionality |
 
+## General officer portal (`/general/`, namespace `general`)
+
+Protected in this order: authenticated → portal access (`general`) →
+capability check → **case authorization**
+(`AuthorizationService.can_access_case`) → action. Files are delivered by an
+authorized view, never by media URL.
+
+| URL | Name | Capability | Purpose |
+|---|---|---|---|
+| `` | `dashboard` | portal access | Overview + recent authorized cases |
+| `cases/register/` | `register_case` | `case.create` | Register a case (FIR + evidence); grants the officer `OWNER` |
+| `cases/` | `view_cases` | `case.view` **+ assignment** | Case register — only cases the officer is authorized to open |
+| `cases/<case id>/fir/` | `download_fir` | `case.download` **+ assignment** | Stream the FIR (audited) |
+| `cases/<case id>/evidence/<pk>/` | `download_evidence` | `case.download` **+ assignment** | Stream one evidence file (audited) |
+
+Case **assignment** is an additional, per-case grant (`CaseAssignment`). It is
+not derivable from the URL, from role, or from having created the case —
+registration simply creates an `OWNER` row so the registering officer is
+authorized through the same path as everyone else.
+
 ## IT / Admin portal (`/admin-portal/`, namespace `it_admin`)
 
 Every route is protected in this order: authenticated → portal access

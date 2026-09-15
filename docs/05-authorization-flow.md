@@ -10,7 +10,7 @@ AuthorizationService.can(user, permission)
 AuthorizationService.get_user_permissions(user) -> set[str]
 AuthorizationService.portal_capabilities(user, portal) -> dict
 AuthorizationService.has_clearance(user, level_code)
-AuthorizationService.can_access_case(user, case)          # interface — future
+AuthorizationService.can_access_case(user, case, action)  # operational
 AuthorizationService.can_access_resource(user, resource, action)  # interface — future
 ```
 
@@ -24,9 +24,9 @@ AuthorizationService.can_access_resource(user, resource, action)  # interface �
 5. (classified only) clearance >= portal required clearance?
 6. RBAC: does the role carry the requested permission?
 7. Organizational scope: unit/org chain matches the resource/portal scope?
-8. Case authorization: assigned to the case?          [future]
-9. Resource classification: clearance >= resource?    [future]
-10. Action permission: allowed for role on resource?  [future]
+8. Case authorization: assigned to the case?          (see 10-case-authorization.md)
+9. Resource classification: clearance >= resource?    (case classification)
+10. Action permission: allowed for role on resource?  (case actions)
 11. Special restrictions (lockout, break-glass)?      [future]
 ```
 
@@ -62,3 +62,15 @@ The UI never *grants* anything — it only reflects the backend result.
 - Correct case but insufficient action permission ⇒ DENY.
 - Unauthorized download / delete ⇒ DENY.
 - IT admin reaching investigation data ⇒ DENY (not implemented as data access).
+
+The case module (`general`) proves the same rules at the operational layer —
+see [`10-case-authorization.md`](10-case-authorization.md):
+
+- Officer who is **not assigned** to a case ⇒ DENY (even if they created it).
+- Assigned officer whose **clearance** is below the case classification ⇒ DENY.
+- Assigned officer outside the case **jurisdiction** ⇒ DENY.
+- Assigned officer whose role lacks the required `case.*` capability ⇒ DENY.
+- `VIEWER` assignment attempting a **download** ⇒ DENY.
+- **Revoked** assignment ⇒ DENY.
+- Fetching a FIR / evidence **URL** directly without authorization ⇒ DENY (403,
+  audited) — media is never served by URL alone.

@@ -42,14 +42,32 @@ project/
 │   ├── urls.py
 │   └── templates/classified/...
 │
-├── it_admin/                # IT / ADMIN PORTAL SHELL
-│   ├── views.py             # officer management, provisioning, reset, MFA,
-│   │                        #   security monitoring, audit viewer
-│   ├── urls.py
+├── it_admin/                # IT / ADMIN PORTAL
+│   ├── views/               # package, split by concern (re-exported through
+│   │   │                    #   views/__init__.py so `it_admin.views` works)
+│   │   ├── dashboard.py     # counters + recent administrative activity
+│   │   ├── officers.py      # directory, provisioning wizard, lifecycle,
+│   │   │                    #   credentials, transfers, timeline, "WHY?" page
+│   │   ├── registries.py    # designations, departments, units, postings
+│   │   ├── bulk.py          # CSV import: upload -> preview -> commit
+│   │   ├── security.py      # account security, devices & sessions, reviews,
+│   │   │                    #   temporary access, audit dashboard + verify
+│   │   ├── access.py        # admin roles & capability matrix, assignments
+│   │   ├── approvals.py     # four-eyes approval centre
+│   │   └── _common.py       # shared helpers (activation links, querysets)
+│   ├── navigation.py        # capability-driven sidebar (context processor)
+│   ├── services.py          # OfficerAdmin, Transfer, Registry, TemporaryAccess,
+│   │                        #   AccessReview and Approval services
+│   ├── approvals.py         # executors run once an approval is granted
+│   ├── bulk.py, timeline.py, models.py, forms.py, urls.py
 │   └── templates/it_admin/...
 │
-├── general/                 # GENERAL OFFICER PORTAL SHELL
-│   ├── views.py
+├── general/                 # GENERAL OFFICER PORTAL (operational cases)
+│   ├── models.py            # CaseRecord (+ security attributes), CaseEvidenceFile,
+│   │                        #   CaseAssignment - the operational grant
+│   ├── views.py             # dashboard, registration, authorized case register,
+│   │                        #   protected FIR / evidence delivery
+│   ├── forms.py             # case registration (classification is required)
 │   ├── urls.py
 │   └── templates/general/...
 │
@@ -77,3 +95,7 @@ general   ──┘        │
 * Portal apps are thin shells; they never decide "who" or "what", they call
   `AuthorizationService` and render the returned capabilities.
 * `audit` is a leaf dependency — everything records into it; it records nothing back.
+* `accounts` never imports a portal app. Where the engine needs operational
+  data (case assignment) it reaches it through duck-typed hooks on `Officer`
+  (`is_assigned_to_case`, `case_actions_for`) that resolve the model via the
+  app registry — so the dependency arrow never reverses.

@@ -69,6 +69,9 @@ class Command(BaseCommand):
         }
         # Granular IT-administration capabilities are defined once, in code.
         specs.update(C.ADMIN_CAPABILITY_DESCRIPTIONS)
+        # Operational (case) capabilities — granted by the operational domain,
+        # never by IT administration.
+        specs.update(C.OPERATIONAL_CAPABILITY_DESCRIPTIONS)
         for codename, description in specs.items():
             Permission.objects.get_or_create(codename=codename, defaults={"description": description})
 
@@ -248,7 +251,12 @@ class Command(BaseCommand):
                 defaults={"description": desc, "rank_weight": weight, "is_system_role": True},
             )
             if created or role.is_system_role:
-                role.permissions.set(perms(*perm_names))
+                wanted = list(perm_names)
+                # Roles that work cases also carry the operational (case)
+                # capabilities; IT-administration roles deliberately do not.
+                wanted += [c for c in C.ROLE_OPERATIONAL_CAPABILITIES.get(name, ())
+                           if c not in wanted]
+                role.permissions.set(perms(*wanted))
                 role.allowed_portals.set(portals)
 
     # -- officers ---------------------------------------------------------------------

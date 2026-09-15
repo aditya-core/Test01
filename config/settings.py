@@ -202,6 +202,15 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Uploaded case files (FIR / evidence). ``MEDIA_ROOT`` MUST be an explicit
+# absolute path and ``MEDIA_URL`` a dedicated prefix: ``config.urls`` mounts
+# media with ``static()`` while DEBUG, and with the Django defaults
+# (MEDIA_ROOT = "" → the process working directory, MEDIA_URL = "" → "/")
+# that would publish the entire repository — including ``.env`` and the
+# SQLite database — over HTTP.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True

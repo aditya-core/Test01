@@ -170,6 +170,101 @@ AUDITOR_CAPABILITIES = (
 )
 
 # ---------------------------------------------------------------------------
+# Operational (case) authorization
+# ---------------------------------------------------------------------------
+# Case authorization is an OPERATIONAL decision. This vocabulary lives in the
+# identity authority so the engine can evaluate it, but it is granted by the
+# operational domain (case assignment), never by IT administration —
+# ``is_admin_capability`` deliberately excludes these prefixes.
+PERM_CASE_VIEW = "case.view"
+PERM_CASE_CREATE = "case.create"
+PERM_CASE_EDIT = "case.edit"
+PERM_CASE_ASSIGN = "case.assign"
+PERM_CASE_UPLOAD_EVIDENCE = "case.upload_evidence"
+PERM_CASE_DOWNLOAD = "case.download"
+
+# The action vocabulary a case resource understands. ``allowed_actions`` on a
+# resource is a *ceiling*: the assignment row decides what an individual
+# officer may actually do inside it.
+ACTION_CASE_VIEW = "view"
+ACTION_CASE_EDIT = "edit"
+ACTION_CASE_UPLOAD_EVIDENCE = "upload_evidence"
+ACTION_CASE_DOWNLOAD = "download"
+ACTION_CASE_ASSIGN = "assign"
+
+CASE_ACTIONS = frozenset({
+    ACTION_CASE_VIEW,
+    ACTION_CASE_EDIT,
+    ACTION_CASE_UPLOAD_EVIDENCE,
+    ACTION_CASE_DOWNLOAD,
+    ACTION_CASE_ASSIGN,
+})
+
+# Action → capability codename an officer must hold to perform it.
+CASE_ACTION_PERMISSIONS = {
+    ACTION_CASE_VIEW: PERM_CASE_VIEW,
+    ACTION_CASE_EDIT: PERM_CASE_EDIT,
+    ACTION_CASE_UPLOAD_EVIDENCE: PERM_CASE_UPLOAD_EVIDENCE,
+    ACTION_CASE_DOWNLOAD: PERM_CASE_DOWNLOAD,
+    ACTION_CASE_ASSIGN: PERM_CASE_ASSIGN,
+}
+
+# Case-assignment roles and the ceiling of actions each one confers.
+ASSIGNMENT_OWNER = "OWNER"
+ASSIGNMENT_INVESTIGATOR = "INVESTIGATOR"
+ASSIGNMENT_SUPERVISOR = "SUPERVISOR"
+ASSIGNMENT_VIEWER = "VIEWER"
+
+ASSIGNMENT_ROLE_CHOICES = (
+    (ASSIGNMENT_OWNER, "Case owner (full control)"),
+    (ASSIGNMENT_INVESTIGATOR, "Investigating officer"),
+    (ASSIGNMENT_SUPERVISOR, "Supervising officer (read-only oversight)"),
+    (ASSIGNMENT_VIEWER, "Viewer (read-only)"),
+)
+
+ASSIGNMENT_ROLE_ACTIONS = {
+    ASSIGNMENT_OWNER: frozenset(CASE_ACTIONS),
+    ASSIGNMENT_INVESTIGATOR: frozenset({
+        ACTION_CASE_VIEW,
+        ACTION_CASE_EDIT,
+        ACTION_CASE_UPLOAD_EVIDENCE,
+        ACTION_CASE_DOWNLOAD,
+    }),
+    ASSIGNMENT_SUPERVISOR: frozenset({ACTION_CASE_VIEW, ACTION_CASE_DOWNLOAD}),
+    ASSIGNMENT_VIEWER: frozenset({ACTION_CASE_VIEW}),
+}
+
+# Descriptions used by seed data / data migrations (data, not policy).
+OPERATIONAL_CAPABILITY_DESCRIPTIONS = {
+    PERM_CASE_VIEW: "View authorized investigation cases.",
+    PERM_CASE_CREATE: "Register new investigation cases.",
+    PERM_CASE_EDIT: "Edit authorized investigation cases.",
+    PERM_CASE_ASSIGN: "Assign officers to authorized cases.",
+    PERM_CASE_UPLOAD_EVIDENCE: "Upload evidence into authorized cases.",
+    PERM_CASE_DOWNLOAD: "Download FIR and evidence from authorized cases.",
+}
+
+# Operational (case) capabilities granted to each seeded operational role.
+# Data, not policy — editable per installation. The IT-administration roles are
+# deliberately absent: administering accounts never grants case access.
+ROLE_OPERATIONAL_CAPABILITIES = {
+    "FIELD_OFFICER": (
+        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD,
+    ),
+    "INVESTIGATING_OFFICER": (
+        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_EDIT,
+        PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD,
+    ),
+    "FORENSIC_OFFICER": (PERM_CASE_VIEW, PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD),
+    "INSPECTOR": (
+        PERM_CASE_VIEW, PERM_CASE_CREATE, PERM_CASE_EDIT, PERM_CASE_ASSIGN,
+        PERM_CASE_UPLOAD_EVIDENCE, PERM_CASE_DOWNLOAD,
+    ),
+    "SENIOR_OFFICER": (PERM_CASE_VIEW, PERM_CASE_ASSIGN, PERM_CASE_DOWNLOAD),
+    "COMMISSIONER": (PERM_CASE_VIEW, PERM_CASE_ASSIGN, PERM_CASE_DOWNLOAD),
+}
+
+# ---------------------------------------------------------------------------
 # Authentication factor types
 # ---------------------------------------------------------------------------
 FACTOR_SECRET_CODE = "SECRET_CODE"
@@ -270,6 +365,13 @@ EVENT_APPROVAL_REJECTED = "APPROVAL_REJECTED"
 EVENT_APPROVAL_CANCELLED = "APPROVAL_CANCELLED"
 EVENT_BULK_OPERATION = "BULK_OPERATION"
 EVENT_AUDIT_CHAIN_VERIFIED = "AUDIT_CHAIN_VERIFIED"
+
+# Operational (case) authorization events.
+EVENT_CASE_REGISTERED = "CASE_REGISTERED"
+EVENT_CASE_ACCESS_GRANTED = "CASE_ACCESS_GRANTED"
+EVENT_CASE_ACCESS_REVOKED = "CASE_ACCESS_REVOKED"
+EVENT_CASE_ACCESS_DENIED = "CASE_ACCESS_DENIED"
+EVENT_CASE_DOCUMENT_DOWNLOAD = "CASE_DOCUMENT_DOWNLOAD"
 
 # Event types that make up an officer's administrative timeline / the
 # dashboard's "recent administrative activity". Login noise is excluded.

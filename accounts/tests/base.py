@@ -102,7 +102,9 @@ class BaseAuthTestCase(TestCase):
         codenames = [
             C.PERM_OFFICER_VIEW, C.PERM_OFFICER_MANAGE,
             C.PERM_SECURITY_VIEW_EVENTS, C.PERM_AUDIT_VIEW, C.PERM_ACCOUNT_MANAGE_SECURITY,
-            "case.view", "case.assign", "case.review", "case.approve",
+            C.PERM_CASE_VIEW, C.PERM_CASE_CREATE, C.PERM_CASE_EDIT, C.PERM_CASE_ASSIGN,
+            C.PERM_CASE_UPLOAD_EVIDENCE, C.PERM_CASE_DOWNLOAD,
+            "case.review", "case.approve",
             "document.view", "document.upload", "document.download",
         ]
         cls.perms = {}
@@ -119,11 +121,16 @@ class BaseAuthTestCase(TestCase):
             return r
 
         cls.field_role = role("FIELD_OFFICER",
-                              [cls.perms["document.view"], cls.perms["document.upload"]],
+                              [cls.perms["document.view"], cls.perms["document.upload"],
+                               cls.perms[C.PERM_CASE_VIEW], cls.perms[C.PERM_CASE_CREATE],
+                               cls.perms[C.PERM_CASE_UPLOAD_EVIDENCE],
+                               cls.perms[C.PERM_CASE_DOWNLOAD]],
                               [cls.portal_general])
         cls.inspector_role = role("INSPECTOR",
                                   [cls.perms["case.view"], cls.perms["case.assign"],
                                    cls.perms["case.review"], cls.perms["case.approve"],
+                                   cls.perms[C.PERM_CASE_CREATE], cls.perms[C.PERM_CASE_EDIT],
+                                   cls.perms[C.PERM_CASE_DOWNLOAD],
                                    cls.perms["document.view"]],
                                   [cls.portal_general])
         cls.senior_role = role("SENIOR_OFFICER",

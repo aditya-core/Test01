@@ -1,9 +1,18 @@
 from django import forms
 
+from accounts.models import ClearanceLevel
 from .models import CaseRecord
 
 
 class CaseRegistrationForm(forms.ModelForm):
+    """Case registration.
+
+    The officer chooses the case's sensitivity (``classification``); the
+    jurisdiction (``organization``) is derived from their own posting in the
+    view and is deliberately not a form field — an officer must not be able to
+    file a case into someone else's district.
+    """
+
     fir_document = forms.FileField(required=False)
 
     class Meta:
@@ -19,6 +28,7 @@ class CaseRegistrationForm(forms.ModelForm):
             "complainant_name",
             "complainant_contact",
             "status",
+            "classification",
             "fir_document",
         ]
         widgets = {
@@ -35,6 +45,16 @@ class CaseRegistrationForm(forms.ModelForm):
         self.fields["location"].widget.attrs.update({"placeholder": "Incident location"})
         self.fields["complainant_name"].widget.attrs.update({"placeholder": "Complainant name"})
         self.fields["complainant_contact"].widget.attrs.update({"placeholder": "Phone or contact number"})
+
+        # Classification is required and defaults to the lowest band: a case's
+        # sensitivity must always be explicit, because it drives who may open it.
+        self.fields["classification"].required = True
+        self.fields["classification"].empty_label = None
+        self.fields["classification"].queryset = ClearanceLevel.objects.all()
+        if not self.initial.get("classification"):
+            lowest = ClearanceLevel.objects.order_by("weight").first()
+            if lowest is not None:
+                self.initial["classification"] = lowest.pk
 
     def save(self, commit=True):
         case = super().save(commit=False)

@@ -39,9 +39,18 @@ Open `http://localhost:8000/`.
 | General (field officer) | `OFF-101` | `ChangeMe!123` | `CODE-101` |
 | General (inspector) | `OFF-102` | `ChangeMe!123` | `CODE-102` |
 | Classified | `OFF-201` | `ChangeMe!123` | `CODE-201` |
-| IT / Admin (SYSTEM ADMIN bundle) | `OFF-301` | `ChangeMe!123` | `CODE-301` |
+| IT / Admin (identity & administration bundle) | `OFF-301` | `ChangeMe!123` | `CODE-301` |
 | Security admin (security ops, reviews, approvals, audit) | `OFF-302` | `ChangeMe!123` | `CODE-302` |
 | Dev superuser | `SU-900` | `ChangeMe!123` | `CODE-900` |
+
+> **Separation of duties — `OFF-301` cannot see the security dashboard.**
+> Despite the "system administration" description, the `IT_ADMIN` bundle holds
+> **no** `security.view_events` / `security.manage_settings`: identity
+> administration and security monitoring are deliberately separate grants
+> (`IT_ADMIN` vs `SECURITY_ADMIN`). This is intentional, not an oversight — the
+> sidebar hides what the officer cannot open. To fold security monitoring into
+> the IT bundle, add those two codenames to `SYSTEM_ADMIN_CAPABILITIES` in
+> `accounts/constants.py` and re-run `seed_demo`.
 
 `seed_demo` also creates the data-driven IT administration roles
 (`IT_ADMIN`, `IDENTITY_ADMIN`, `SECURITY_ADMIN`, `AUDITOR`), the designation and
@@ -72,18 +81,40 @@ pre-activated for convenience.)
   explains each administrative capability (WHAT / WHY / SOURCE / STATUS).
 
 IT administration never grants operational (case / evidence) authorization:
-*“Operational authorization is managed separately.”*
+*“Operational authorization is managed separately.”* Case access is granted per
+investigation by the operational domain — see
+[`docs/10-case-authorization.md`](docs/10-case-authorization.md).
 
 Upgrading an existing installation only needs `python manage.py migrate`
 (migrations convert existing `rank` / `department` text into the new
 registries and back-fill the audit hash chain) followed by an optional
 `python manage.py seed_demo` to create the admin role bundles.
 
+## General officer portal (cases)
+
+`/general/` registers investigation cases with an FIR and evidence files.
+
+Case access is **operational** authorization, decided entirely by
+`AuthorizationService.can_access_case()` — never by filtering in a template:
+
+```
+ACTIVE + clearance >= case classification + same jurisdiction
+       + active CaseAssignment + required case.* capability
+       + action within the assignment's ceiling  =  ALLOW
+```
+
+Registering a case creates an `OWNER` `CaseAssignment`, so the registering
+officer is authorized through the same path as everyone else. FIR and evidence
+files are streamed by authorized views (`/general/cases/<id>/fir/`), never by
+media URL. Everything is audited, denials included.
+Details: [`docs/10-case-authorization.md`](docs/10-case-authorization.md).
+
 ## Tests
 
 ```bash
-python manage.py test              # full suite (accounts, audit, it_admin)
+python manage.py test              # full suite (accounts, audit, it_admin, general)
 python manage.py test it_admin     # IT / Admin portal feature tests
+python manage.py test general      # case authorization (deny-by-default) tests
 ```
 
 Covers: valid login, invalid password / Officer ID / secret code, locked /
@@ -115,9 +146,10 @@ classified/   classified portal shell
 it_admin/     IT / admin portal (directory, provisioning, registries, transfers,
               lifecycle, devices & sessions, audit, access reviews, temporary
               access, admin roles, four-eyes approvals, bulk import)
-general/      general officer portal shell
+general/      general officer portal (case register + protected file delivery)
 portal/       shared authenticated shell (base template, nav)
 docs/         design documents
+media/        uploaded case files (git-ignored — never commit)
 ```
 
 ## Security notes
