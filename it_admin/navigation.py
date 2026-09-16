@@ -40,6 +40,8 @@ NAV_SPEC = (
         ("Temporary Access", "it_admin:temporary_access_list", {C.PERM_ACCESS_GRANT_TEMPORARY, C.PERM_ACCESS_REVIEW},
          {"temporary_access_list", "temporary_access_create"}),
         ("Audit Log", "it_admin:audit_dashboard", {C.PERM_AUDIT_VIEW}, {"audit_dashboard"}),
+        ("Case Oversight", "it_admin:case_oversight_list", {C.PERM_CASE_AUDIT_VIEW},
+         {"case_oversight_list", "case_oversight_detail"}),
     )),
     ("Administration", (
         ("Admin Roles", "it_admin:admin_role_list", {C.PERM_ADMIN_ROLE_MANAGE, C.PERM_APPROVAL_REVIEW, C.PERM_AUDIT_VIEW},

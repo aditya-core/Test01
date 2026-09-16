@@ -83,6 +83,12 @@
         {{ form.status }}
         {% for e in form.status.errors %}<div class="error">{{ e }}</div>{% endfor %}
       </div>
+
+      <div class="field {% if form.classification.errors %}field--error{% endif %}">
+        <label for="{{ form.classification.id_for_label }}">Case Classification <span class="req">*</span></label>
+        {{ form.classification }}
+        {% for e in form.classification.errors %}<div class="error">{{ e }}</div>{% endfor %}
+      </div>
     </div>
 
     <div class="field {% if form.summary.errors %}field--error{% endif %}">

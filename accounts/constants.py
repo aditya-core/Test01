@@ -91,6 +91,7 @@ PERM_ADMIN_ROLE_MANAGE = "admin.role.manage"
 PERM_APPROVAL_REVIEW = "approval.review"
 PERM_ACCESS_REVIEW = "access.review"
 PERM_ACCESS_GRANT_TEMPORARY = "access.grant_temporary"
+PERM_CASE_AUDIT_VIEW = "case.audit_view"
 
 # Descriptions used by seed data / data migrations (data, not policy).
 ADMIN_CAPABILITY_DESCRIPTIONS = {
@@ -119,6 +120,7 @@ ADMIN_CAPABILITY_DESCRIPTIONS = {
     PERM_APPROVAL_REVIEW: "Approve or reject pending administrative requests.",
     PERM_ACCESS_REVIEW: "Perform periodic access reviews.",
     PERM_ACCESS_GRANT_TEMPORARY: "Grant time-boxed administrative capabilities.",
+    PERM_CASE_AUDIT_VIEW: "Read case details and case activity across departments; cannot change operational data.",
 }
 
 # Capability prefixes that belong to the IT / identity administration domain.
@@ -131,7 +133,10 @@ ADMIN_CAPABILITY_PREFIXES = (
 
 
 def is_admin_capability(codename: str) -> bool:
-    return bool(codename) and codename.startswith(ADMIN_CAPABILITY_PREFIXES)
+    return bool(codename) and (
+        codename.startswith(ADMIN_CAPABILITY_PREFIXES)
+        or codename == PERM_CASE_AUDIT_VIEW
+    )
 
 
 # Umbrella → implied capabilities. Kept deliberately tiny: it exists only so
@@ -157,16 +162,19 @@ SYSTEM_ADMIN_CAPABILITIES = IDENTITY_ADMIN_CAPABILITIES + (
     PERM_SESSION_VIEW, PERM_SESSION_TERMINATE, PERM_AUDIT_VIEW,
     PERM_ADMIN_ROLE_MANAGE, PERM_APPROVAL_REVIEW, PERM_ACCESS_REVIEW,
     PERM_ACCESS_GRANT_TEMPORARY,
+    PERM_CASE_AUDIT_VIEW,
 )
 SECURITY_ADMIN_CAPABILITIES = (
     PERM_OFFICER_VIEW, PERM_SECURITY_VIEW_EVENTS, PERM_SECURITY_MANAGE_SETTINGS,
     PERM_AUDIT_VIEW, PERM_DEVICE_VIEW, PERM_DEVICE_REVOKE, PERM_SESSION_VIEW,
     PERM_SESSION_TERMINATE, PERM_OFFICER_SUSPEND, PERM_OFFICER_REACTIVATE,
     PERM_APPROVAL_REVIEW, PERM_ACCESS_REVIEW,
+    PERM_CASE_AUDIT_VIEW,
 )
 AUDITOR_CAPABILITIES = (
     PERM_OFFICER_VIEW, PERM_AUDIT_VIEW, PERM_SECURITY_VIEW_EVENTS,
     PERM_DEVICE_VIEW, PERM_SESSION_VIEW, PERM_DESIGNATION_VIEW, PERM_DEPARTMENT_VIEW,
+    PERM_CASE_AUDIT_VIEW,
 )
 
 # ---------------------------------------------------------------------------

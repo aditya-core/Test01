@@ -1,0 +1,74 @@
+{% extends "it_admin/base.html" %}
+{% block title %}{{ case.case_id }} Case Oversight{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <p class="crumbs small"><a href="{% url 'it_admin:case_oversight_list' %}">Case Oversight</a> / {{ case.case_id }}</p>
+    <h2>{{ case.case_id }} <span class="mono muted">{{ case.title }}</span></h2>
+    <p class="muted small">Read-only administrative oversight. Operational actions and file downloads remain outside IT/Admin.</p>
+  </div>
+  <div class="page-head__actions"><a class="btn btn--ghost btn--sm" href="{% url 'it_admin:case_oversight_list' %}">Back to cases</a></div>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <h3>Case details</h3>
+    <dl class="kv">
+      <dt>Case type</dt><dd>{{ case.case_type }}</dd>
+      <dt>Status</dt><dd>{{ case.status }}</dd>
+      <dt>Classification</dt><dd>{{ case.classification.code|default:"—" }}</dd>
+      <dt>Jurisdiction</dt><dd>{{ case.organization.name|default:"—" }}</dd>
+      <dt>Unit</dt><dd>{{ case.unit.name|default:"—" }}</dd>
+      <dt>Police station</dt><dd>{{ case.police_station|default:"—" }}</dd>
+      <dt>Agency</dt><dd>{{ case.investigating_agency|default:"—" }}</dd>
+      <dt>Incident date</dt><dd>{{ case.incident_date|date:"Y-m-d" }}</dd>
+      <dt>Created by</dt><dd>{{ case.created_by.officer_id }} — {{ case.created_by.full_name }}</dd>
+      <dt>Created</dt><dd>{{ case.created_at|date:"Y-m-d H:i" }}</dd>
+      <dt>Last updated</dt><dd>{{ case.updated_at|date:"Y-m-d H:i" }}</dd>
+    </dl>
+    <h4>Summary</h4>
+    <p>{{ case.summary|default:"No summary provided." }}</p>
+  </div>
+
+  <div class="panel">
+    <h3>Assigned officers</h3>
+    <table class="table table--compact">
+      <thead><tr><th>Officer</th><th>Role</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for assignment in assignments %}
+        <tr><td>{{ assignment.officer.officer_id }}<br><span class="small">{{ assignment.officer.full_name }}</span></td><td>{{ assignment.role }}</td><td>{% if assignment.is_active %}Active{% else %}Revoked{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="3" class="muted">No assignments.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <h3>Access grants</h3>
+    <table class="table table--compact">
+      <thead><tr><th>Recipient</th><th>Actions</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for grant in grants %}
+        <tr><td>{{ grant.recipient_label }}</td><td class="small">{{ grant.actions|join:", " }}</td><td>{{ grant.effective_status }}</td></tr>
+      {% empty %}<tr><td colspan="3" class="muted">No explicit grants.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel__head"><h3>Case activity</h3><span class="muted small">Append-only audit events associated with this case</span></div>
+  <table class="table table--compact">
+    <thead><tr><th>Time</th><th>Event</th><th>Actor</th><th>Action</th><th>Result</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for event in activity %}
+      <tr>
+        <td class="mono small">{{ event.occurred_at|date:"Y-m-d H:i" }}</td>
+        <td class="small">{{ event.event_type }}</td>
+        <td class="small">{{ event.actor.officer_id|default:"system" }}</td>
+        <td class="small">{{ event.action|default:"—" }}</td>
+        <td><span class="badge badge--{{ event.result|lower|default:'info' }}">{{ event.result|default:"—" }}</span></td>
+        <td class="small">{{ event.reason|default:"—" }}</td>
+      </tr>
+    {% empty %}<tr><td colspan="6" class="muted">No audit activity recorded for this case.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

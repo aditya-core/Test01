@@ -1,0 +1,41 @@
+{% extends "it_admin/base.html" %}
+{% block title %}Case Oversight{% endblock %}
+
+{% block admin_content %}
+<div class="page-head">
+  <div>
+    <p class="crumbs small">Security / Case Oversight</p>
+    <h2>Case oversight</h2>
+    <p class="muted small">Read-only visibility across departments and officers. This view does not grant operational case access or file downloads.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <form method="get" class="filter-bar">
+    <div class="filter-bar__grow">
+      <input type="text" name="q" value="{{ query }}" placeholder="Case ID, title, officer, station, agency...">
+    </div>
+    <button type="submit" class="btn btn--ghost">Search</button>
+  </form>
+
+  <table class="table table--compact">
+    <thead><tr><th>Case</th><th>Owner</th><th>Department / unit</th><th>Classification</th><th>Status</th><th>Updated</th></tr></thead>
+    <tbody>
+    {% for case in cases %}
+      <tr>
+        <td><a href="{% url 'it_admin:case_oversight_detail' case.case_id %}"><strong>{{ case.case_id }}</strong></a><div class="small">{{ case.title }}</div></td>
+        <td class="small">{{ case.created_by.officer_id }}<br>{{ case.created_by.full_name }}</td>
+        <td class="small">{{ case.organization.name|default:"—" }}<br>{{ case.unit.name|default:"—" }}</td>
+        <td><span class="badge badge--info">{{ case.classification.code|default:"—" }}</span></td>
+        <td>{{ case.status }}</td>
+        <td class="small">{{ case.updated_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="muted">No cases found.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% include "it_admin/_partials/pagination.html" with page=page %}
+</div>
+{% endblock %}

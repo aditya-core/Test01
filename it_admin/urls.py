@@ -6,6 +6,8 @@ app_name = "it_admin"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("cases/", views.case_oversight_list, name="case_oversight_list"),
+    path("cases/<str:case_id>/", views.case_oversight_detail, name="case_oversight_detail"),
 
     # ---- Identity: officers
     path("officers/", views.officer_list, name="officer_list"),

@@ -15,3 +15,4 @@ from .officers import *  # noqa: F401,F403
 from .registries import *  # noqa: F401,F403
 from .security import *  # noqa: F401,F403
 from .access import *  # noqa: F401,F403
+from .case_oversight import *  # noqa: F401,F403
